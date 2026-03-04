@@ -1,0 +1,107 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Valleys",
+  "projectDescription": "A lightweight TypeScript library for assertion-based runtime data validation",
+  "theme": "palm",
+  "primaryColor": "#438ffb",
+  "lightColor": "#97ccfc",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/validators",
+              "concepts/type-inference",
+              "concepts/error-handling"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/performance",
+              "guides/comparison",
+              "guides/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Primitives",
+            "pages": [
+              "api/string",
+              "api/number",
+              "api/boolean",
+              "api/constant",
+              "api/null",
+              "api/undefined"
+            ]
+          },
+          {
+            "group": "Structured Types",
+            "pages": [
+              "api/array",
+              "api/object",
+              "api/or"
+            ]
+          },
+          {
+            "group": "Specialized Validators",
+            "pages": [
+              "api/url",
+              "api/iso8601"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/validate",
+              "api/infer-output-of",
+              "api/validation-error"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Assertion-based validation with type narrowing",
+    "Zero dependencies and minimal runtime overhead",
+    "Fail-fast validation approach",
+    "Structured error system with precise error paths",
+    "Full TypeScript type inference support",
+    "Comprehensive validator library (string, number, boolean, array, object, etc.)"
+  ],
+  "publicApiSurface": [
+    "validate()",
+    "string()",
+    "number()",
+    "boolean()",
+    "url()",
+    "constant()",
+    "array()",
+    "object()",
+    "or()",
+    "iso8601()",
+    "null_()",
+    "undefined_()",
+    "InferOutputOf<T>",
+    "ValidationError",
+    "Iso8601String",
+    "UrlString"
+  ]
+}
