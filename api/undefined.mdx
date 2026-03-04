@@ -1,0 +1,245 @@
+---
+title: 'undefined_()'
+description: 'Creates a validator that validates undefined values'
+---
+
+## Function Signature
+
+```typescript
+function undefined_(): Validator<undefined, { type: "undefined" }, {}>
+```
+
+## Description
+
+Creates a validator that validates undefined values. Only accepts the literal `undefined` value using strict equality. This validator has no configurable rules.
+
+**Note:** The function is named `undefined_()` with an underscore because `undefined` is a reserved keyword in JavaScript.
+
+## Parameters
+
+This function takes no parameters.
+
+## Returns
+
+Returns a `Validator<undefined>` that can be used to validate undefined values.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is:
+
+```typescript
+undefined
+```
+
+## Examples
+
+### Basic Undefined Validation
+
+```typescript
+import { undefined_, validate } from 'valleys';
+
+const undefinedValidator = undefined_();
+
+const data: unknown = undefined;
+validate(data, undefinedValidator);
+// data is now typed as undefined
+console.log(data); // undefined
+```
+
+### Rejecting Non-Undefined Values
+
+```typescript
+import { undefined_, validate } from 'valleys';
+
+const validator = undefined_();
+
+validate(null, validator);
+// Throws ValidationError: schema violation
+
+validate(0, validator);
+// Throws ValidationError: schema violation
+
+validate("", validator);
+// Throws ValidationError: schema violation
+
+validate(false, validator);
+// Throws ValidationError: schema violation
+```
+
+### Optional Fields
+
+```typescript
+import { object, string, undefined_, or, validate } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  nickname: or([string(), undefined_()]) // Can be string or undefined
+});
+
+const user1: unknown = {
+  name: "Alice",
+  nickname: "Ally"
+};
+
+validate(user1, userValidator);
+// ✅ Passes validation
+
+const user2: unknown = {
+  name: "Bob",
+  nickname: undefined
+};
+
+validate(user2, userValidator);
+// ✅ Passes validation
+```
+
+### Differentiating Undefined from Null
+
+```typescript
+import { null_, undefined_, validate } from 'valleys';
+
+const undefinedValidator = undefined_();
+const nullValidator = null_();
+
+validate(undefined, undefinedValidator);
+// ✅ Passes validation
+
+validate(undefined, nullValidator);
+// Throws ValidationError: schema violation
+
+validate(null, undefinedValidator);
+// Throws ValidationError: schema violation
+
+validate(null, nullValidator);
+// ✅ Passes validation
+```
+
+### Optional Configuration Values
+
+```typescript
+import { object, boolean, number, undefined_, or, validate } from 'valleys';
+
+const configValidator = object({
+  enableFeature: boolean(),
+  maxRetries: or([number(), undefined_()]), // Optional: use default if undefined
+  timeout: or([number(), undefined_()]) // Optional: use default if undefined
+});
+
+const config1: unknown = {
+  enableFeature: true,
+  maxRetries: 3,
+  timeout: 5000
+};
+
+validate(config1, configValidator);
+// ✅ Passes validation
+
+const config2: unknown = {
+  enableFeature: false,
+  maxRetries: undefined,
+  timeout: undefined
+};
+
+validate(config2, configValidator);
+// ✅ Passes validation
+```
+
+### Union with Multiple Types
+
+```typescript
+import { or, string, number, undefined_, validate, InferOutputOf } from 'valleys';
+
+const valueValidator = or([string(), number(), undefined_()]);
+
+type Value = InferOutputOf<typeof valueValidator>; // string | number | undefined
+
+validate("hello", valueValidator);
+// ✅ Passes validation
+
+validate(42, valueValidator);
+// ✅ Passes validation
+
+validate(undefined, valueValidator);
+// ✅ Passes validation
+
+validate(null, valueValidator);
+// Throws ValidationError: schema violation
+```
+
+### Missing Object Properties
+
+```typescript
+import { object, string, number, undefined_, or, validate } from 'valleys';
+
+const dataValidator = object({
+  id: number(),
+  name: string(),
+  description: or([string(), undefined_()])
+});
+
+// Property explicitly set to undefined
+const data1: unknown = {
+  id: 1,
+  name: "Item",
+  description: undefined
+};
+
+validate(data1, dataValidator);
+// ✅ Passes validation
+
+// Property present with a value
+const data2: unknown = {
+  id: 2,
+  name: "Another Item",
+  description: "A detailed description"
+};
+
+validate(data2, dataValidator);
+// ✅ Passes validation
+```
+
+### Nullable vs Optional
+
+```typescript
+import { or, string, null_, undefined_, validate } from 'valleys';
+
+// Nullable: can be string or null (but not undefined)
+const nullableValidator = or([string(), null_()]);
+
+// Optional: can be string or undefined (but not null)
+const optionalValidator = or([string(), undefined_()]);
+
+// Nullable or optional: can be string, null, or undefined
+const flexibleValidator = or([string(), null_(), undefined_()]);
+
+validate(null, nullableValidator);
+// ✅ Passes validation
+
+validate(undefined, nullableValidator);
+// Throws ValidationError: schema violation
+
+validate(undefined, optionalValidator);
+// ✅ Passes validation
+
+validate(null, optionalValidator);
+// Throws ValidationError: schema violation
+```
+
+## Validation Behavior
+
+1. **Strict Equality Check**: Uses strict equality (`input !== undefined`) to verify the input is exactly `undefined`
+2. No type coercion is performed
+3. No additional rules are applied
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not the literal `undefined` value
+
+## Notes
+
+- The function is named `undefined_()` with an underscore suffix because `undefined` is a reserved keyword
+- Uses strict equality, so only the literal `undefined` value passes validation
+- `null`, `0`, `false`, and `""` are NOT considered equal to `undefined` and will fail validation
+- Commonly used with `or()` to create optional fields
+- Different from `null_()` which validates the `null` value
+- In JavaScript objects, missing properties have the value `undefined`, so this validator is useful for optional object properties

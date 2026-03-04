@@ -1,0 +1,290 @@
+---
+title: Library Comparison
+description: How Valleys compares to Zod, Valibot, Decoders, and other TypeScript validation libraries
+---
+
+## Fundamental Difference
+
+The key distinction between Valleys and other popular validation libraries lies in its validation philosophy:
+
+<CardGroup cols={2}>
+  <Card title="Valleys" icon="bolt">
+    **Assertion-based validation** - Validates data in-place and narrows TypeScript types without cloning or transformation
+  </Card>
+  <Card title="Others (Zod, Valibot, etc.)" icon="copy">
+    **Parse & transform** - Returns new, potentially transformed values from validation functions
+  </Card>
+</CardGroup>
+
+## Validation Approach
+
+### Valleys: In-Place Type Assertion
+
+```typescript
+import { validate, object, string, number } from "valleys";
+
+// Example of untrusted data (e.g., from an API)
+const input: unknown = { id: 123, name: "Alice" };
+
+// Validate the data (throws if validation fails)
+validate(input, object({ id: number(), name: string() }));
+
+// `input` is now typed as { id: number; name: string }
+// The original variable's type is refined - no new object created
+console.log(input.id, input.name);
+```
+
+### Other Libraries: Parse & Clone
+
+```typescript
+import { z } from "zod";
+
+const schema = z.object({ id: z.number(), name: z.string() });
+const input: unknown = { id: 123, name: "Alice" };
+
+// Returns a new validated object
+const output = schema.parse(input);
+
+// input is still 'unknown', output is the typed result
+console.log(output.id, output.name);
+```
+
+## Performance Comparison
+
+Benchmarks show Valleys significantly outperforms alternatives:
+
+### Basic Validation
+
+- **Valleys vs Zod 4**: ~1.5-2x faster for simple string and number validation
+- Minimal overhead from zero-copy approach
+
+### Validation with Rules
+
+The performance gap widens dramatically with validation constraints:
+
+```typescript
+// These types of validations show 20-30x performance improvement
+validate(input, string({ minLength: 3, maxLength: 50 }));
+validate(input, number({ min: 0, max: 100 }));
+validate(input, array(string(), { minLength: 1 }));
+```
+
+- **Valleys vs Zod/Valibot**: 20-30x faster when checking:
+  - String length limits
+  - Number ranges  
+  - Array size constraints
+
+View benchmarks:
+- [Valleys vs Zod](https://github.com/nimeshnayaju/zod?tab=readme-ov-file#benchmarks)
+- [Valleys vs Zod vs Valibot](https://github.com/nimeshnayaju/valibot-benchmarks?tab=readme-ov-file#relative-performance-valleys-vs-others)
+
+## API Comparison
+
+### Type Inference
+
+<CodeGroup>
+```typescript Valleys
+import { object, string, number, InferOutputOf } from "valleys";
+
+const userValidator = object({ id: number(), name: string() });
+type User = InferOutputOf<typeof userValidator>;
+// User is { id: number; name: string }
+```
+
+```typescript Zod
+import { z } from "zod";
+
+const userSchema = z.object({ id: z.number(), name: z.string() });
+type User = z.infer<typeof userSchema>;
+// User is { id: number; name: string }
+```
+</CodeGroup>
+
+### Basic Validators
+
+<CodeGroup>
+```typescript Valleys
+import { string, number, boolean, null_, undefined_ } from "valleys";
+
+const stringV = string();
+const numberV = number();
+const booleanV = boolean();
+const nullV = null_();
+const undefinedV = undefined_();
+```
+
+```typescript Zod
+import { z } from "zod";
+
+const stringV = z.string();
+const numberV = z.number();
+const booleanV = z.boolean();
+const nullV = z.null();
+const undefinedV = z.undefined();
+```
+</CodeGroup>
+
+### Validation Rules
+
+<CodeGroup>
+```typescript Valleys
+import { string, number } from "valleys";
+
+// Rules passed as options object
+string({ minLength: 3, maxLength: 50 });
+number({ min: 0, max: 100 });
+```
+
+```typescript Zod
+import { z } from "zod";
+
+// Rules chained as methods
+z.string().min(3).max(50);
+z.number().min(0).max(100);
+```
+</CodeGroup>
+
+### Union Types
+
+<CodeGroup>
+```typescript Valleys
+import { or, string, number, null_ } from "valleys";
+
+// Union via or() function
+const stringOrNumber = or([string(), number()]);
+const nullable = or([string(), null_()]);
+```
+
+```typescript Zod
+import { z } from "zod";
+
+// Union via .union() or .or()
+const stringOrNumber = z.union([z.string(), z.number()]);
+const nullable = z.string().nullable();
+```
+</CodeGroup>
+
+### Literal Values
+
+<CodeGroup>
+```typescript Valleys
+import { constant, or } from "valleys";
+
+const status = or([
+  constant("pending"),
+  constant("active"),
+  constant("completed")
+]);
+// Type: "pending" | "active" | "completed"
+```
+
+```typescript Zod
+import { z } from "zod";
+
+const status = z.union([
+  z.literal("pending"),
+  z.literal("active"),
+  z.literal("completed")
+]);
+// Or: z.enum(["pending", "active", "completed"])
+```
+</CodeGroup>
+
+## Error Handling
+
+### Valleys: Fail-Fast with Structured Errors
+
+```typescript
+import { validate, ValidationError, object, string, number } from "valleys";
+
+try {
+  validate(input, object({ name: string(), age: number() }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Human-readable default message
+    console.log(error.message);
+    // "Validation failed at user.age due to schema mismatch; expected schema: {\"type\":\"number\"}; received value: \"ten\""
+    
+    // Access structured error tree for custom handling
+    console.log(error.experimental_root);
+  }
+}
+```
+
+**Philosophy**: Valleys throws immediately on the first validation failure (fail-fast), providing better performance and clearer error messages. The structured error tree allows you to build custom error formatting for your application.
+
+### Other Libraries: Varied Approaches
+
+Other libraries have different error handling strategies:
+
+- **Zod**: Collects all errors by default, supports early return mode
+- **Valibot**: Configurable error collection
+- **Decoders**: Returns Result type (Either pattern)
+
+## Feature Comparison
+
+| Feature | Valleys | Zod | Valibot | Decoders |
+|---------|---------|-----|---------|----------|
+| Zero dependencies | ✓ | ✗ | ✓ | ✗ |
+| Zero-copy validation | ✓ | ✗ | ✗ | ✗ |
+| Type assertion | ✓ | ✗ | ✗ | ✗ |
+| Custom transformations | ✗ | ✓ | ✓ | ✓ |
+| String refinements | Basic | Advanced | Advanced | Advanced |
+| Date parsing | ✗ | ✓ | ✓ | ✓ |
+| ISO8601 validation | ✓ | Via string | Via string | Via string |
+| URL validation | ✓ | Via string | Via string | Via string |
+| Branded types | ✓ | ✓ | ✗ | ✗ |
+| Fail-fast | ✓ | Optional | Optional | ✓ |
+| Bundle size | Smallest | Large | Small | Medium |
+| Performance | Fastest | Baseline | Fast | Medium |
+
+## Use Case Recommendations
+
+### Choose Valleys When:
+
+- **Performance is critical** - High-throughput APIs, real-time systems, large datasets
+- **Memory efficiency matters** - Resource-constrained environments
+- **Simple validation** - You need type safety without transformations
+- **Minimal bundle size** - Zero dependencies, lightweight footprint
+
+### Choose Other Libraries When:
+
+- **Complex transformations** - Data needs to be coerced, parsed, or transformed during validation
+- **Extensive refinements** - Need advanced string parsing (email, UUID, etc.)
+- **Ecosystem integration** - Building on existing Zod/Valibot codebases
+
+## Inspiration
+
+Valleys' API is inspired by [Decoders](https://decoders.cc/), an excellent validation library that also emphasizes type safety and developer experience. There is an [in-progress pull request](https://github.com/nvie/decoders/pull/1256) to add readonly decoder support to Decoders, which would bring similar zero-copy benefits.
+
+## Migration Guide
+
+If you're coming from another validation library, here are the key concepts to understand:
+
+### From Zod
+
+```typescript
+// Zod
+const user = userSchema.parse(input); // Returns new object
+
+// Valleys
+validate(input, userValidator); // Asserts input type
+// Use input directly - it's now typed
+```
+
+### From Valibot
+
+```typescript
+// Valibot  
+const result = parse(userSchema, input); // Returns new object
+
+// Valleys
+validate(input, userValidator); // Asserts input type
+// Use input directly - it's now typed
+```
+
+### Key Mindset Shift
+
+Instead of thinking "parse and return validated data", think "assert that data matches schema".
+
+The data you validate **is** the validated data - Valleys just narrows its TypeScript type to prove it's safe.

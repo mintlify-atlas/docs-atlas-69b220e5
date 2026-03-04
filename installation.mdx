@@ -1,0 +1,78 @@
+---
+title: Installation
+description: Install Valleys in your TypeScript project using npm, yarn, or pnpm
+---
+
+Valleys is available as an npm package with zero dependencies. You can install it using your preferred package manager.
+
+## Requirements
+
+Valleys requires the following:
+
+- **Node.js**: Version 14 or higher
+- **TypeScript**: Version 4.5 or higher (for full type inference support)
+
+## Package managers
+
+Choose your preferred package manager to install Valleys:
+
+<CodeGroup>
+
+```bash npm
+npm install valleys
+```
+
+```bash yarn
+yarn add valleys
+```
+
+```bash pnpm
+pnpm add valleys
+```
+
+</CodeGroup>
+
+## Verify installation
+
+After installation, you can verify that Valleys is working correctly by creating a simple validation:
+
+```typescript
+import { string, validate } from "valleys";
+
+const input: unknown = "hello";
+validate(input, string());
+
+console.log(input); // TypeScript now knows input is a string
+```
+
+If you see no errors, Valleys is installed correctly and ready to use.
+
+## TypeScript configuration
+
+Valleys works best with strict TypeScript settings. We recommend enabling the following in your `tsconfig.json`:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true
+  }
+}
+```
+
+These settings ensure you get the full benefit of Valleys' type inference and validation.
+
+## Bundle size
+
+Valleys is designed to be lightweight with zero dependencies:
+
+- **Unpacked size**: ~20 KB
+- **No external dependencies**: Keeps your bundle clean
+- **Tree-shakeable**: Import only what you need
+
+## Next steps
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Learn how to use Valleys with a complete quickstart guide
+</Card>

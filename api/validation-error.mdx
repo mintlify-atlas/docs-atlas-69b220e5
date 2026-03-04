@@ -1,0 +1,393 @@
+---
+title: "ValidationError"
+description: "Error class thrown when validation fails"
+---
+
+## Class Signature
+
+```typescript
+class ValidationError extends Error {
+  constructor(node: ErrorPathNode | ErrorLeafNode)
+  get experimental_root(): ErrorPathNode | ErrorLeafNode
+}
+```
+
+## Description
+
+The `ValidationError` class is thrown by the `validate()` function when validation fails. It extends the standard JavaScript `Error` class and provides:
+
+- A formatted error message describing what went wrong
+- Access to the structured error node tree via `experimental_root`
+- Proper stack trace handling
+
+## Constructor
+
+<ParamField path="node" type="ErrorPathNode | ErrorLeafNode" required>
+  The error node describing the validation failure. This can be either:
+  - A path node (`ArrayIndexErrorNode` or `ObjectPropertyErrorNode`) for nested errors
+  - A leaf node (`SchemaViolationErrorNode` or `RuleViolationErrorNode`) for direct errors
+</ParamField>
+
+## Properties
+
+<ResponseField name="message" type="string">
+  The formatted error message. Automatically generated from the error node.
+  
+  Format: `"Validation failed [at path] due to [reason]; expected schema: {...}[ with rules: {...}]; received value: ..."`
+</ResponseField>
+
+<ResponseField name="experimental_root" type="ErrorPathNode | ErrorLeafNode">
+  The root error node containing the full error structure. This property is marked as experimental and may change in future versions.
+  
+  Use this to programmatically inspect the error details and build custom error handling logic.
+</ResponseField>
+
+## Error Node Types
+
+### ArrayIndexErrorNode
+
+Represents a validation error within an array at a specific index.
+
+```typescript
+type ArrayIndexErrorNode = {
+  type: "array-index";
+  data: Array<unknown>;
+  entry: {
+    index: number;
+    node: ArrayIndexErrorNode | ObjectPropertyErrorNode | SchemaViolationErrorNode | RuleViolationErrorNode;
+  };
+};
+```
+
+<ParamField path="type" type="'array-index'" required>
+  Identifies this as an array index error
+</ParamField>
+
+<ParamField path="data" type="Array<unknown>" required>
+  The array that contains the invalid value
+</ParamField>
+
+<ParamField path="entry.index" type="number" required>
+  The zero-based index where the error occurred
+</ParamField>
+
+<ParamField path="entry.node" type="ErrorNode" required>
+  The nested error node describing what went wrong at this index
+</ParamField>
+
+### ObjectPropertyErrorNode
+
+Represents a validation error on an object property.
+
+```typescript
+type ObjectPropertyErrorNode = {
+  type: "object-property";
+  data: Record<string, unknown>;
+  entry: {
+    property: string;
+    node: ArrayIndexErrorNode | ObjectPropertyErrorNode | SchemaViolationErrorNode | RuleViolationErrorNode;
+  };
+};
+```
+
+<ParamField path="type" type="'object-property'" required>
+  Identifies this as an object property error
+</ParamField>
+
+<ParamField path="data" type="Record<string, unknown>" required>
+  The object that contains the invalid property
+</ParamField>
+
+<ParamField path="entry.property" type="string" required>
+  The property name where the error occurred
+</ParamField>
+
+<ParamField path="entry.node" type="ErrorNode" required>
+  The nested error node describing what went wrong at this property
+</ParamField>
+
+### SchemaViolationErrorNode
+
+Represents a validation error where the value doesn't match the expected type.
+
+```typescript
+type SchemaViolationErrorNode = {
+  type: "schema-violation";
+  data: unknown;
+  context: {
+    schema: { type: string };
+    rules: Record<string, unknown>;
+  };
+};
+```
+
+<ParamField path="type" type="'schema-violation'" required>
+  Identifies this as a schema violation error
+</ParamField>
+
+<ParamField path="data" type="unknown" required>
+  The value that violated the schema
+</ParamField>
+
+<ParamField path="context.schema" type="{ type: string }" required>
+  The expected schema. Contains at minimum a `type` field (e.g., `{ type: "string" }`)
+</ParamField>
+
+<ParamField path="context.rules" type="Record<string, unknown>" required>
+  The validation rules applied to this schema (may be empty)
+</ParamField>
+
+### RuleViolationErrorNode
+
+Represents a validation error where the value matches the schema type but violates a validation rule.
+
+```typescript
+type RuleViolationErrorNode<
+  R extends Record<string, unknown> = Record<string, unknown>,
+  D = unknown,
+> = {
+  type: "rule-violation";
+  rule: keyof R;
+  data: D;
+  context: {
+    schema: { type: string };
+    rules: Record<string, unknown>;
+  };
+};
+```
+
+<ParamField path="type" type="'rule-violation'" required>
+  Identifies this as a rule violation error
+</ParamField>
+
+<ParamField path="rule" type="string" required>
+  The name of the rule that was violated (e.g., `"minLength"`, `"max"`, `"min"`)
+</ParamField>
+
+<ParamField path="data" type="unknown" required>
+  The value that violated the rule
+</ParamField>
+
+<ParamField path="context.schema" type="{ type: string }" required>
+  The schema that the value matched before the rule violation
+</ParamField>
+
+<ParamField path="context.rules" type="Record<string, unknown>" required>
+  The validation rules, including the one that was violated
+</ParamField>
+
+## Error Messages
+
+Error messages follow this format:
+
+```
+Validation failed [at <path>] due to <reason>; expected schema: <schema>[ with rules: <rules>]; received value: <value>
+```
+
+### Schema Violation Example
+
+```
+Validation failed due to schema mismatch; expected schema: {"type":"number"}; received value: "not a number"
+```
+
+### Rule Violation Example
+
+```
+Validation failed due to rule violation: maxLength; expected schema: {"type":"string"} with rules: {"maxLength":10}; received value: "this is too long"
+```
+
+### Nested Error Example
+
+```
+Validation failed at users[1].age due to rule violation: max; expected schema: {"type":"number"} with rules: {"min":0,"max":120}; received value: 150
+```
+
+## Examples
+
+### Basic Error Handling
+
+```typescript
+import { validate, ValidationError, number } from 'valleys';
+
+try {
+  validate('not a number', number());
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed due to schema mismatch; expected schema: {"type":"number"}; received value: "not a number""
+  }
+}
+```
+
+### Accessing Error Details
+
+```typescript
+import { validate, ValidationError, string } from 'valleys';
+
+try {
+  validate('hi', string({ minLength: 5 }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    const root = error.experimental_root;
+    
+    if (root.type === 'rule-violation') {
+      console.log(`Rule '${String(root.rule)}' was violated`);
+      // "Rule 'minLength' was violated"
+      
+      console.log('Expected rules:', root.context.rules);
+      // Expected rules: { minLength: 5 }
+      
+      console.log('Received value:', root.data);
+      // Received value: "hi"
+    }
+  }
+}
+```
+
+### Nested Object Errors
+
+```typescript
+import { validate, ValidationError, object, string, number } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: number({ min: 0, max: 120 })
+});
+
+try {
+  validate({ name: 'Alice', age: 150 }, userValidator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed at age due to rule violation: max; expected schema: {"type":"number"} with rules: {"min":0,"max":120}; received value: 150"
+    
+    const root = error.experimental_root;
+    if (root.type === 'object-property') {
+      console.log('Property:', root.entry.property); // "age"
+      console.log('Invalid object:', root.data); // { name: 'Alice', age: 150 }
+      
+      const leafNode = root.entry.node;
+      if (leafNode.type === 'rule-violation') {
+        console.log('Violated rule:', String(leafNode.rule)); // "max"
+      }
+    }
+  }
+}
+```
+
+### Array Errors
+
+```typescript
+import { validate, ValidationError, array, number } from 'valleys';
+
+try {
+  validate([1, 2, 'three', 4], array(number()));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed at [2] due to schema mismatch; expected schema: {"type":"number"}; received value: "three""
+    
+    const root = error.experimental_root;
+    if (root.type === 'array-index') {
+      console.log('Invalid index:', root.entry.index); // 2
+      console.log('Full array:', root.data); // [1, 2, 'three', 4]
+    }
+  }
+}
+```
+
+### Deeply Nested Errors
+
+```typescript
+import { validate, ValidationError, object, array, number } from 'valleys';
+
+const validator = object({
+  users: array(object({
+    id: number(),
+    scores: array(number({ min: 0, max: 100 }))
+  }))
+});
+
+try {
+  validate({
+    users: [
+      { id: 1, scores: [85, 90] },
+      { id: 2, scores: [75, 105] } // 105 exceeds max
+    ]
+  }, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed at users[1].scores[1] due to rule violation: max; expected schema: {"type":"number"} with rules: {"min":0,"max":100}; received value: 105"
+  }
+}
+```
+
+### Custom Error Handling
+
+```typescript
+import { validate, ValidationError } from 'valleys';
+import type { ErrorPathNode, ErrorLeafNode } from 'valleys';
+
+function getErrorPath(node: ErrorPathNode | ErrorLeafNode): string {
+  const parts: string[] = [];
+  
+  let current = node;
+  while (current.type === 'array-index' || current.type === 'object-property') {
+    if (current.type === 'array-index') {
+      parts.unshift(`[${current.entry.index}]`);
+      current = current.entry.node;
+    } else {
+      parts.unshift(current.entry.property);
+      current = current.entry.node;
+    }
+  }
+  
+  return parts.join('.');
+}
+
+try {
+  validate(data, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    const path = getErrorPath(error.experimental_root);
+    console.log(`Error at path: ${path}`);
+  }
+}
+```
+
+## Implementation Details
+
+From `index.ts:771-782`:
+
+```typescript
+export class ValidationError extends Error {
+  #root: ErrorPathNode | ErrorLeafNode;
+
+  constructor(node: ErrorPathNode | ErrorLeafNode) {
+    super(formatError(node));
+    this.#root = node;
+  }
+
+  get experimental_root(): ErrorPathNode | ErrorLeafNode {
+    return this.#root;
+  }
+}
+```
+
+The error message is formatted by the internal `formatError` function (lines 784-819) which:
+1. Starts with "Validation failed"
+2. Adds the path if the error is nested (e.g., "at users[1].age")
+3. Describes the failure reason (schema mismatch or specific rule violation)
+4. Includes the expected schema and rules
+5. Shows the received value
+
+Path formatting is handled by `formatErrorPath` (lines 821-852) which:
+- Traverses the error node tree
+- Builds a path string like `property.nested[0].field`
+- Handles both object properties and array indices
+
+## See Also
+
+- [validate()](/api/validate) - Function that throws ValidationError
+- [Validators](/concepts/validators) - The base validator interface

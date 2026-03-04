@@ -1,0 +1,184 @@
+---
+title: 'array()'
+description: 'Validate array values with optional item validators and length constraints'
+---
+
+## Overview
+
+Creates a validator that validates array values. Supports optional item validation and length constraints.
+
+## Function Signatures
+
+```typescript
+function array(): Validator<
+  Array<unknown>,
+  { type: "array" },
+  { minLength?: number }
+>
+```
+
+```typescript
+function array(rules: {
+  minLength?: number;
+}): Validator<Array<unknown>, { type: "array" }, { minLength?: number }>
+```
+
+```typescript
+function array<D extends Validator<any, any, any>>(
+  validator: D,
+  rules?: { minLength?: number }
+): Validator<
+  Array<InferOutputOf<D>>,
+  { type: "array"; item: D["schema"] },
+  { minLength?: number }
+>
+```
+
+## Parameters
+
+<ParamField path="validator" type="Validator<T>" optional>
+  Optional validator for array items. When provided, each item in the array will be validated against this validator. The output type automatically infers as `Array<T>` where `T` is the validator's output type.
+</ParamField>
+
+<ParamField path="rules" type="object" optional>
+  Optional validation rules for the array.
+  
+  <ParamField path="rules.minLength" type="number" optional>
+    Minimum allowed array length (inclusive).
+  </ParamField>
+</ParamField>
+
+## Returns
+
+Returns a `Validator` that validates array values:
+- Without item validator: accepts any array and returns `Array<unknown>`
+- With item validator: validates each item and returns `Array<T>` where `T` is inferred from the item validator
+
+## Basic Usage
+
+```typescript
+import { array, string, number } from 'valleys';
+
+// Array without item validation
+const anyArray = array();
+// Type: Validator<Array<unknown>>
+
+// Array with minimum length
+const nonEmptyArray = array({ minLength: 1 });
+// Type: Validator<Array<unknown>>
+
+// Array of strings
+const stringArray = array(string());
+// Type: Validator<Array<string>>
+
+// Array of numbers with minimum length
+const numberArray = array(number(), { minLength: 2 });
+// Type: Validator<Array<number>>
+```
+
+## Type Inference
+
+The `array()` validator automatically infers the correct TypeScript type based on the item validator:
+
+```typescript
+import { array, string, number, InferOutputOf } from 'valleys';
+
+// Simple array types
+const stringsValidator = array(string());
+type Strings = InferOutputOf<typeof stringsValidator>;
+// type Strings = string[]
+
+const numbersValidator = array(number());
+type Numbers = InferOutputOf<typeof numbersValidator>;
+// type Numbers = number[]
+```
+
+## Nested Arrays
+
+Arrays can be nested to validate multi-dimensional arrays:
+
+```typescript
+import { array, string, number } from 'valleys';
+
+// Array of arrays of strings
+const matrix = array(array(string()));
+// Type: Validator<Array<Array<string>>>
+
+// 3D array of numbers
+const tensor = array(array(array(number())));
+// Type: Validator<Array<Array<Array<number>>>>
+```
+
+## Arrays with Complex Items
+
+```typescript
+import { array, object, string, number } from 'valleys';
+
+// Array of user objects
+const usersValidator = array(
+  object({
+    id: number(),
+    name: string(),
+    email: string()
+  })
+);
+// Type: Validator<Array<{ id: number; name: string; email: string; }>>
+
+// With validation rules
+const nonEmptyUsersValidator = array(
+  object({
+    id: number(),
+    name: string()
+  }),
+  { minLength: 1 }
+);
+```
+
+## Validation Behavior
+
+The validator performs the following checks:
+
+1. **Type check**: Ensures the value is an array using `Array.isArray()`
+2. **Length validation**: If `minLength` is specified, ensures the array has at least that many items
+3. **Item validation**: If an item validator is provided, validates each item in order. Returns an error at the first invalid item.
+
+```typescript
+import { array, string, validate } from 'valleys';
+
+const validator = array(string(), { minLength: 2 });
+
+// Valid
+validate(['hello', 'world'], validator); // ✓
+
+// Invalid - not an array
+validate('not an array', validator); // ✗ schema-violation
+
+// Invalid - too few items
+validate(['only one'], validator); // ✗ rule-violation: minLength
+
+// Invalid - wrong item type
+validate(['hello', 123], validator); // ✗ array-index error at [1]
+```
+
+## Error Messages
+
+Validation errors provide specific information:
+
+```typescript
+import { array, number, validate } from 'valleys';
+
+const validator = array(number());
+
+try {
+  validate(['not', 'numbers'], validator);
+} catch (error) {
+  console.log(error.message);
+  // "Validation failed at [0] due to schema mismatch; expected schema: {"type":"number"}; received value: "not""
+}
+```
+
+## See Also
+
+- [object()](/api/object) - Validate object values
+- [or()](/api/or) - Validate union types
+- [InferOutputOf](/api/infer-output-of) - Extract output types from validators

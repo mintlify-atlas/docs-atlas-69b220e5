@@ -1,0 +1,258 @@
+---
+title: 'or()'
+description: 'Validate union types by trying multiple validators'
+---
+
+## Overview
+
+Creates a validator that validates values matching any of the provided validators. Tries each validator in order and returns the first successful result.
+
+## Function Signature
+
+```typescript
+function or<D extends readonly Validator<any, any, any>[]>(
+  validators: D
+): Validator<
+  InferOutputOf<D[number]>,
+  { type: "or"; item: D[number]["schema"][] }
+>
+```
+
+## Parameters
+
+<ParamField path="validators" type="readonly Validator[]" required>
+  Array of validators to try in order. The function will attempt to validate the input against each validator sequentially until one succeeds.
+  
+  The output type is automatically inferred as a union of all validator output types.
+</ParamField>
+
+## Returns
+
+Returns a `Validator` that accepts values matching any of the provided validators. The output type is the union of all validator output types.
+
+## Basic Usage
+
+```typescript
+import { or, string, number } from 'valleys';
+
+// String or number
+const stringOrNumber = or([string(), number()]);
+// Type: Validator<string | number>
+
+// Multiple types
+const multiType = or([string(), number(), boolean()]);
+// Type: Validator<string | number | boolean>
+```
+
+## Type Inference
+
+The `or()` validator automatically infers union types:
+
+```typescript
+import { or, string, number, boolean, InferOutputOf } from 'valleys';
+
+const validator = or([string(), number(), boolean()]);
+
+type Result = InferOutputOf<typeof validator>;
+// type Result = string | number | boolean
+```
+
+## Optional Fields
+
+Combine with `undefined_()` to create optional types:
+
+```typescript
+import { or, string, undefined_ } from 'valleys';
+
+const optionalString = or([string(), undefined_()]);
+// Type: Validator<string | undefined>
+
+// Use in objects for optional fields
+import { object, number } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  nickname: or([string(), undefined_()]) // Optional field
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   nickname?: string | undefined;
+// }
+```
+
+## Nullable Types
+
+Combine with `null_()` for nullable types:
+
+```typescript
+import { or, string, null_ } from 'valleys';
+
+const nullableString = or([string(), null_()]);
+// Type: Validator<string | null>
+
+const optionalNullableString = or([string(), null_(), undefined_()]);
+// Type: Validator<string | null | undefined>
+```
+
+## Literal Types
+
+Create discriminated unions with `constant()`:
+
+```typescript
+import { or, object, constant, string, number } from 'valleys';
+
+// Status union
+const statusValidator = or([
+  constant('pending'),
+  constant('approved'),
+  constant('rejected')
+]);
+// Type: Validator<'pending' | 'approved' | 'rejected'>
+
+// Discriminated union
+const shapeValidator = or([
+  object({
+    type: constant('circle'),
+    radius: number()
+  }),
+  object({
+    type: constant('rectangle'),
+    width: number(),
+    height: number()
+  })
+]);
+
+type Shape = InferOutputOf<typeof shapeValidator>;
+// type Shape = 
+//   | { type: 'circle'; radius: number; }
+//   | { type: 'rectangle'; width: number; height: number; }
+```
+
+## Complex Union Types
+
+```typescript
+import { or, object, array, string, number, boolean } from 'valleys';
+
+// Array or single item
+const arrayOrItem = or([
+  array(string()),
+  string()
+]);
+// Type: Validator<string[] | string>
+
+// Different object shapes
+const responseValidator = or([
+  object({
+    success: constant(true),
+    data: string()
+  }),
+  object({
+    success: constant(false),
+    error: string()
+  })
+]);
+
+type Response = InferOutputOf<typeof responseValidator>;
+// type Response = 
+//   | { success: true; data: string; }
+//   | { success: false; error: string; }
+```
+
+## Validation Behavior
+
+The validator tries each validator in order:
+
+1. Attempts validation with the first validator
+2. If successful, returns the validated value immediately
+3. If failed, tries the next validator
+4. Continues until a validator succeeds or all fail
+5. If all validators fail, returns a schema violation error
+
+```typescript
+import { or, string, number, validate } from 'valleys';
+
+const validator = or([string(), number()]);
+
+// Valid - matches first validator (string)
+validate('hello', validator); // ✓ returns 'hello'
+
+// Valid - matches second validator (number)
+validate(42, validator); // ✓ returns 42
+
+// Invalid - matches neither
+validate(true, validator); // ✗ schema-violation
+validate(null, validator); // ✗ schema-violation
+validate([], validator); // ✗ schema-violation
+```
+
+## Order Matters
+
+Validators are tried in the order provided. For best performance, order validators from most specific to least specific:
+
+```typescript
+import { or, constant, string } from 'valleys';
+
+// Good: specific constants first
+const goodOrder = or([
+  constant('admin'),
+  constant('user'),
+  string() // Generic fallback
+]);
+
+// Less efficient: generic validator first will always match
+const poorOrder = or([
+  string(), // Always matches strings
+  constant('admin'), // Never reached
+  constant('user') // Never reached
+]);
+```
+
+## Nested Unions
+
+Unions can be nested for complex type hierarchies:
+
+```typescript
+import { or, object, string, number, boolean, null_ } from 'valleys';
+
+const primitiveValidator = or([string(), number(), boolean()]);
+
+const valueValidator = or([
+  primitiveValidator,
+  null_(),
+  object({
+    nested: primitiveValidator
+  })
+]);
+
+type Value = InferOutputOf<typeof valueValidator>;
+// type Value = string | number | boolean | null | { nested: string | number | boolean; }
+```
+
+## Error Messages
+
+When all validators fail, the error references the union schema:
+
+```typescript
+import { or, string, number, validate } from 'valleys';
+
+const validator = or([string(), number()]);
+
+try {
+  validate(true, validator);
+} catch (error) {
+  console.log(error.message);
+  // "Validation failed due to schema mismatch; expected schema: {"type":"or","item":[{"type":"string"},{"type":"number"}]}; received value: true"
+}
+```
+
+## See Also
+
+- [constant()](/api/constant) - Validate literal values
+- [null_()](/api/null) - Validate null values
+- [undefined_()](/api/undefined) - Validate undefined values
+- [object()](/api/object) - Validate object values
+- [array()](/api/array) - Validate array values

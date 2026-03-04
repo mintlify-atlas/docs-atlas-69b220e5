@@ -1,0 +1,476 @@
+---
+title: Error Handling
+description: Understanding validation errors in Valleys, error structure, and custom error handling
+---
+
+## Overview
+
+When validation fails, Valleys provides detailed error information that pinpoints exactly what went wrong. The error structure is designed to be both machine-readable and human-friendly.
+
+## ValidationError Class
+
+Validation failures throw a `ValidationError` instance:
+
+```typescript
+export class ValidationError extends Error {
+  #root: ErrorPathNode | ErrorLeafNode;
+
+  constructor(node: ErrorPathNode | ErrorLeafNode) {
+    super(formatError(node));
+    this.#root = node;
+  }
+
+  get experimental_root(): ErrorPathNode | ErrorLeafNode {
+    return this.#root;
+  }
+}
+```
+
+The error includes:
+- A formatted error message (from `Error.message`)
+- The root error node accessible via `experimental_root` for programmatic error handling
+
+<Warning>
+The `experimental_root` property is marked as experimental and may change in future versions.
+</Warning>
+
+## Error Node Types
+
+Valleys uses a tree structure to represent validation errors. There are four types of error nodes:
+
+### Schema Violation
+
+Occurs when a value doesn't match the expected type:
+
+```typescript
+type SchemaViolationErrorNode = {
+  type: "schema-violation";
+  data: unknown;
+  context: {
+    schema: { type: string };
+    rules: Record<string, unknown>;
+  };
+};
+```
+
+Example:
+
+```typescript
+import { validate, string } from 'valleys';
+
+try {
+  validate(123, string());
+} catch (error) {
+  console.error(error.message);
+  // "Validation failed due to schema mismatch; 
+  //  expected schema: {"type":"string"}; 
+  //  received value: 123"
+}
+```
+
+### Rule Violation
+
+Occurs when a value matches the type but violates a rule:
+
+```typescript
+type RuleViolationErrorNode<
+  R extends Record<string, unknown> = Record<string, unknown>,
+  D = unknown,
+> = {
+  type: "rule-violation";
+  rule: keyof R;
+  data: D;
+  context: {
+    schema: { type: string };
+    rules: Record<string, unknown>;
+  };
+};
+```
+
+Example:
+
+```typescript
+import { validate, string } from 'valleys';
+
+try {
+  validate("ab", string({ minLength: 3 }));
+} catch (error) {
+  console.error(error.message);
+  // "Validation failed due to rule violation: minLength; 
+  //  expected schema: {"type":"string"} with rules: {"minLength":3}; 
+  //  received value: \"ab\""
+}
+```
+
+### Object Property Error
+
+Occurs when an object property validation fails:
+
+```typescript
+type ObjectPropertyErrorNode = {
+  type: "object-property";
+  data: Record<string, unknown>;
+  entry: {
+    property: string;
+    node:
+      | ArrayIndexErrorNode
+      | ObjectPropertyErrorNode
+      | SchemaViolationErrorNode
+      | RuleViolationErrorNode;
+  };
+};
+```
+
+Example:
+
+```typescript
+import { validate, object, string, number } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+
+try {
+  validate({ name: "Alice", age: "30" }, userValidator);
+} catch (error) {
+  console.error(error.message);
+  // "Validation failed at age due to schema mismatch; 
+  //  expected schema: {"type":"number"}; 
+  //  received value: \"30\""
+}
+```
+
+### Array Index Error
+
+Occurs when an array item validation fails:
+
+```typescript
+type ArrayIndexErrorNode = {
+  type: "array-index";
+  data: Array<unknown>;
+  entry: {
+    index: number;
+    node:
+      | ArrayIndexErrorNode
+      | ObjectPropertyErrorNode
+      | SchemaViolationErrorNode
+      | RuleViolationErrorNode;
+  };
+};
+```
+
+Example:
+
+```typescript
+import { validate, array, number } from 'valleys';
+
+try {
+  validate([1, 2, "three", 4], array(number()));
+} catch (error) {
+  console.error(error.message);
+  // "Validation failed at [2] due to schema mismatch; 
+  //  expected schema: {"type":"number"}; 
+  //  received value: \"three\""
+}
+```
+
+## Error Path Formatting
+
+Validation errors include a path that shows exactly where the error occurred:
+
+```typescript
+// Simple property error
+validate({ name: 123 }, object({ name: string() }));
+// Error: "Validation failed at name due to schema mismatch..."
+
+// Nested object error
+validate(
+  { user: { name: 123 } },
+  object({ user: object({ name: string() }) })
+);
+// Error: "Validation failed at user.name due to schema mismatch..."
+
+// Array index error
+validate([1, 2, "three"], array(number()));
+// Error: "Validation failed at [2] due to schema mismatch..."
+
+// Complex nested path
+validate(
+  { users: [{ name: "Alice" }, { name: 123 }] },
+  object({ users: array(object({ name: string() })) })
+);
+// Error: "Validation failed at users[1].name due to schema mismatch..."
+```
+
+The path format follows these rules:
+- Object properties: `property.nestedProperty`
+- Array indices: `[index]`
+- Combined: `property[index].nestedProperty`
+
+## Catching and Handling Errors
+
+### Basic Error Handling
+
+Use try-catch to handle validation errors:
+
+```typescript
+import { validate, ValidationError, object, string, number } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+
+function processUser(data: unknown) {
+  try {
+    validate(data, userValidator);
+    // data is now typed as { name: string; age: number }
+    console.log(`Processing user: ${data.name}`);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      console.error('Validation failed:', error.message);
+      return null;
+    }
+    throw error; // Re-throw unexpected errors
+  }
+}
+```
+
+### Accessing Error Details
+
+For programmatic error handling, access the error node structure:
+
+```typescript
+import { validate, ValidationError } from 'valleys';
+
+try {
+  validate(data, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    const errorNode = error.experimental_root;
+    
+    if (errorNode.type === 'schema-violation') {
+      console.log('Schema mismatch');
+      console.log('Expected:', errorNode.context.schema);
+      console.log('Received:', errorNode.data);
+    } else if (errorNode.type === 'rule-violation') {
+      console.log('Rule violation:', errorNode.rule);
+      console.log('Rules:', errorNode.context.rules);
+      console.log('Value:', errorNode.data);
+    }
+  }
+}
+```
+
+### Traversing Error Trees
+
+For complex nested validation errors, you may need to traverse the error tree:
+
+```typescript
+function findRootCause(node: any): any {
+  // Navigate to the leaf node (actual validation failure)
+  while (node.type === 'object-property' || node.type === 'array-index') {
+    node = node.entry.node;
+  }
+  return node;
+}
+
+try {
+  validate(complexData, complexValidator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    const rootCause = findRootCause(error.experimental_root);
+    console.log('Root cause:', rootCause);
+  }
+}
+```
+
+## Using `unstable_validate` Directly
+
+Instead of using `validate()` which throws errors, you can call `unstable_validate` directly to get a result object:
+
+```typescript
+import { string } from 'valleys';
+
+const validator = string({ minLength: 3 });
+
+const result = validator.unstable_validate("ab");
+
+if (result.error !== undefined) {
+  console.error('Validation failed');
+  console.log('Error type:', result.error.type);
+  console.log('Data:', result.error.data);
+  if (result.error.type === 'rule-violation') {
+    console.log('Rule:', result.error.rule);
+  }
+} else {
+  console.log('Valid value:', result.value);
+}
+```
+
+The return type is a discriminated union:
+
+```typescript
+| { value: Output; error?: never }
+| {
+    value?: never;
+    error:
+      | ArrayIndexErrorNode
+      | ObjectPropertyErrorNode
+      | SchemaViolationErrorNode
+      | RuleViolationErrorNode;
+  }
+```
+
+This allows you to handle validation results without try-catch:
+
+```typescript
+function validateUser(data: unknown) {
+  const result = userValidator.unstable_validate(data);
+  
+  if (result.error !== undefined) {
+    return { success: false, error: result.error };
+  }
+  
+  return { success: true, user: result.value };
+}
+```
+
+<Warning>
+The `unstable_validate` method is marked as unstable and may change in future versions. Use the `validate()` function for the stable API.
+</Warning>
+
+## Error Context
+
+Every error node includes a `context` object with the schema and rules that were being validated:
+
+```typescript
+try {
+  validate("ab", string({ minLength: 5, maxLength: 20 }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    const node = error.experimental_root;
+    console.log(node.context.schema); // { type: "string" }
+    console.log(node.context.rules);  // { minLength: 5, maxLength: 20 }
+  }
+}
+```
+
+This context helps you understand what validation was expected and can be useful for:
+- Debugging validation issues
+- Generating user-friendly error messages
+- Logging validation failures
+- Building custom error handling logic
+
+## Best Practices
+
+### 1. Always Handle ValidationError
+
+Don't let validation errors crash your application:
+
+```typescript
+try {
+  validate(data, validator);
+  processData(data);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Handle validation error gracefully
+    logger.warn('Invalid data received', { error: error.message });
+    return { error: 'Invalid input' };
+  }
+  throw error; // Re-throw unexpected errors
+}
+```
+
+### 2. Provide User-Friendly Messages
+
+The raw error messages are technical. Convert them for end users:
+
+```typescript
+function getUserFriendlyMessage(error: ValidationError): string {
+  const message = error.message;
+  
+  if (message.includes('schema mismatch')) {
+    return 'The data format is incorrect';
+  }
+  if (message.includes('minLength')) {
+    return 'Value is too short';
+  }
+  if (message.includes('maxLength')) {
+    return 'Value is too long';
+  }
+  if (message.includes('min')) {
+    return 'Value is too small';
+  }
+  if (message.includes('max')) {
+    return 'Value is too large';
+  }
+  
+  return 'Invalid data provided';
+}
+```
+
+### 3. Log Validation Failures
+
+Validation failures often indicate data quality issues:
+
+```typescript
+try {
+  validate(data, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    logger.warn('Validation failed', {
+      error: error.message,
+      errorNode: error.experimental_root,
+      data: JSON.stringify(data)
+    });
+  }
+  throw error;
+}
+```
+
+### 4. Validate at Boundaries
+
+Validate data when it enters your system:
+
+```typescript
+// API endpoints
+app.post('/api/users', (req, res) => {
+  try {
+    validate(req.body, userValidator);
+    const user = await createUser(req.body);
+    res.json(user);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    throw error;
+  }
+});
+
+// Message queue consumers
+queue.process(async (job) => {
+  try {
+    validate(job.data, taskValidator);
+    await processTask(job.data);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      logger.error('Invalid task data', { error: error.message });
+      return; // Don't retry invalid data
+    }
+    throw error; // Retry other errors
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validators" icon="check-circle" href="/concepts/validators">
+    Learn about validator composition and schemas
+  </Card>
+  <Card title="Type Inference" icon="code" href="/concepts/type-inference">
+    Understand how TypeScript types are inferred
+  </Card>
+</CardGroup>

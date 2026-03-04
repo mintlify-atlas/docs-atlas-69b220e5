@@ -1,0 +1,346 @@
+---
+title: Type Inference
+description: How TypeScript type inference works with Valleys validators and InferOutputOf
+---
+
+## Overview
+
+Valleys provides seamless TypeScript integration through automatic type inference. When you create a validator, TypeScript can automatically derive the type of values that validator accepts.
+
+## The `InferOutputOf` Type Utility
+
+The `InferOutputOf<T>` type utility extracts the output type from any validator:
+
+```typescript
+export type InferOutputOf<D extends Validator<any, any, any>> =
+  D extends Validator<infer T, any, any> ? T : never;
+```
+
+This conditional type extracts the `Output` generic parameter from a `Validator<Output, Schema, RuleSet>` type.
+
+## Basic Type Inference
+
+### Primitive Types
+
+For simple validators, the inferred type matches the primitive:
+
+```typescript
+import { InferOutputOf, string, number, boolean } from 'valleys';
+
+const nameValidator = string();
+type Name = InferOutputOf<typeof nameValidator>;
+// type Name = string
+
+const ageValidator = number();
+type Age = InferOutputOf<typeof ageValidator>;
+// type Age = number
+
+const activeValidator = boolean();
+type Active = InferOutputOf<typeof activeValidator>;
+// type Active = boolean
+```
+
+### Branded Types
+
+Some validators return branded types for additional type safety:
+
+```typescript
+import { InferOutputOf, url, iso8601 } from 'valleys';
+
+const urlValidator = url();
+type Url = InferOutputOf<typeof urlValidator>;
+// type Url = UrlString (branded string)
+
+const dateValidator = iso8601();
+type DateTime = InferOutputOf<typeof dateValidator>;
+// type DateTime = Iso8601String (branded string)
+```
+
+Branded types are still strings at runtime but are distinct types in TypeScript, preventing accidental mixing:
+
+```typescript
+function navigateTo(url: UrlString) {
+  window.location.href = url;
+}
+
+const validUrl: UrlString = /* ... */;
+navigateTo(validUrl); // ✅ OK
+
+const regularString: string = "https://example.com";
+navigateTo(regularString); // ❌ Type error: string is not assignable to UrlString
+```
+
+## Complex Type Inference
+
+### Object Types
+
+For object validators, `InferOutputOf` produces an object type with the correct property types:
+
+```typescript
+import { InferOutputOf, object, string, number, boolean } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean()
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   email: string;
+//   isActive: boolean;
+// }
+```
+
+### Nested Objects
+
+Type inference works recursively for nested structures:
+
+```typescript
+const profileValidator = object({
+  user: object({
+    name: string(),
+    age: number()
+  }),
+  settings: object({
+    theme: string(),
+    notifications: boolean()
+  })
+});
+
+type Profile = InferOutputOf<typeof profileValidator>;
+// type Profile = {
+//   user: {
+//     name: string;
+//     age: number;
+//   };
+//   settings: {
+//     theme: string;
+//     notifications: boolean;
+//   };
+// }
+```
+
+### Array Types
+
+Array validators infer array types based on their item validator:
+
+```typescript
+import { InferOutputOf, array, string, number } from 'valleys';
+
+const tagsValidator = array(string());
+type Tags = InferOutputOf<typeof tagsValidator>;
+// type Tags = string[]
+
+const scoresValidator = array(number());
+type Scores = InferOutputOf<typeof scoresValidator>;
+// type Scores = number[]
+
+// Arrays of objects
+const usersValidator = array(object({
+  id: number(),
+  name: string()
+}));
+type Users = InferOutputOf<typeof usersValidator>;
+// type Users = Array<{ id: number; name: string }>
+```
+
+### Union Types with `or()`
+
+The `or()` validator creates union types:
+
+```typescript
+import { InferOutputOf, or, string, number } from 'valleys';
+
+const idValidator = or([string(), number()]);
+type Id = InferOutputOf<typeof idValidator>;
+// type Id = string | number
+
+const valueValidator = or([
+  string(),
+  number(),
+  boolean()
+]);
+type Value = InferOutputOf<typeof valueValidator>;
+// type Value = string | number | boolean
+```
+
+### Optional Properties
+
+Optional properties use `or()` with `undefined_()`:
+
+```typescript
+import { InferOutputOf, object, string, number, or, undefined_ } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: or([number(), undefined_()])
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   name: string;
+//   age?: number | undefined;
+// }
+```
+
+Valleys' type system automatically recognizes when a property can be `undefined` and marks it as optional in the resulting type.
+
+### Constant Literals
+
+The `constant()` validator produces literal types:
+
+```typescript
+import { InferOutputOf, constant, or } from 'valleys';
+
+const statusValidator = or([
+  constant("pending"),
+  constant("approved"),
+  constant("rejected")
+]);
+
+type Status = InferOutputOf<typeof statusValidator>;
+// type Status = "pending" | "approved" | "rejected"
+```
+
+## Type Assertions with `validate()`
+
+The `validate()` function uses TypeScript's assertion signatures to narrow types:
+
+```typescript
+export function validate<D extends Validator<any, any, any>>(
+  value: unknown,
+  validator: D,
+): asserts value is InferOutputOf<D> {
+  const result = validator.unstable_validate(value);
+  if (result.error !== undefined) {
+    throw new ValidationError(result.error);
+  }
+}
+```
+
+The `asserts value is InferOutputOf<D>` return type tells TypeScript that if the function doesn't throw, the value is guaranteed to match the validator's output type:
+
+```typescript
+import { validate, object, string, number, array } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  tags: array(string())
+});
+
+function processUserData(data: unknown) {
+  // data is unknown here
+  validate(data, userValidator);
+  
+  // After validate(), TypeScript knows the exact type
+  console.log(data.name.toUpperCase()); // ✅ TypeScript knows data.name is string
+  console.log(data.email.toLowerCase()); // ✅ TypeScript knows data.email is string
+  data.tags.forEach(tag => console.log(tag)); // ✅ TypeScript knows data.tags is string[]
+}
+```
+
+This provides type safety without manual type annotations:
+
+```typescript
+try {
+  validate(data, userValidator);
+  // TypeScript now knows:
+  // data is { id: number; name: string; email: string; tags: string[] }
+  console.log(data.name); // ✅ No type errors
+} catch (error) {
+  // Handle validation error
+  console.error('Invalid user data');
+}
+```
+
+## Defining Reusable Types
+
+You can define both validators and types for reuse across your application:
+
+```typescript
+import { InferOutputOf, object, string, number, boolean, array } from 'valleys';
+
+// Define validator
+export const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean(),
+  tags: array(string())
+});
+
+// Export inferred type
+export type User = InferOutputOf<typeof userValidator>;
+
+// Use in function signatures
+export function saveUser(user: User) {
+  // user has the correct type
+  console.log(user.name);
+}
+
+// Use for validation
+export function validateAndSave(data: unknown) {
+  validate(data, userValidator);
+  saveUser(data); // ✅ data is now typed as User
+}
+```
+
+## Rules Don't Affect Types
+
+Importantly, validation rules don't change the inferred TypeScript type:
+
+```typescript
+const ageValidator = number({ min: 0, max: 120 });
+type Age = InferOutputOf<typeof ageValidator>;
+// type Age = number
+// TypeScript doesn't represent the min/max constraints
+
+const usernameValidator = string({ minLength: 3, maxLength: 20 });
+type Username = InferOutputOf<typeof usernameValidator>;
+// type Username = string
+// TypeScript doesn't represent the length constraints
+```
+
+This is a limitation of TypeScript's type system. While Valleys validates these constraints at runtime, TypeScript can't express them in its type system. This is why runtime validation with Valleys is essential even in TypeScript projects.
+
+## Working with Generic Validators
+
+You can create generic functions that work with any validator:
+
+```typescript
+import { Validator, InferOutputOf, validate } from 'valleys';
+
+function validateAndTransform<V extends Validator<any, any, any>>(
+  data: unknown,
+  validator: V,
+  transform: (value: InferOutputOf<V>) => InferOutputOf<V>
+): InferOutputOf<V> {
+  validate(data, validator);
+  return transform(data);
+}
+
+// Usage
+const result = validateAndTransform(
+  someData,
+  object({ name: string(), age: number() }),
+  user => ({ ...user, age: user.age + 1 })
+);
+// result is typed as { name: string; age: number }
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validators" icon="check-circle" href="/concepts/validators">
+    Learn about validator composition and schemas
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/concepts/error-handling">
+    Understand validation error structure and handling
+  </Card>
+</CardGroup>

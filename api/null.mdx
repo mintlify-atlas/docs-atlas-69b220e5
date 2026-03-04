@@ -1,0 +1,203 @@
+---
+title: 'null_()'
+description: 'Creates a validator that validates null values'
+---
+
+## Function Signature
+
+```typescript
+function null_(): Validator<null, { type: "null" }, {}>
+```
+
+## Description
+
+Creates a validator that validates null values. Only accepts the literal `null` value using strict equality. This validator has no configurable rules.
+
+**Note:** The function is named `null_()` with an underscore because `null` is a reserved keyword in JavaScript.
+
+## Parameters
+
+This function takes no parameters.
+
+## Returns
+
+Returns a `Validator<null>` that can be used to validate null values.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is:
+
+```typescript
+null
+```
+
+## Examples
+
+### Basic Null Validation
+
+```typescript
+import { null_, validate } from 'valleys';
+
+const nullValidator = null_();
+
+const data: unknown = null;
+validate(data, nullValidator);
+// data is now typed as null
+console.log(data); // null
+```
+
+### Rejecting Non-Null Values
+
+```typescript
+import { null_, validate } from 'valleys';
+
+const validator = null_();
+
+validate(undefined, validator);
+// Throws ValidationError: schema violation
+
+validate(0, validator);
+// Throws ValidationError: schema violation
+
+validate("", validator);
+// Throws ValidationError: schema violation
+
+validate(false, validator);
+// Throws ValidationError: schema violation
+```
+
+### Optional Fields with Null
+
+```typescript
+import { object, string, null_, or, validate } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  middleName: or([string(), null_()]) // Can be string or null
+});
+
+const user1: unknown = {
+  name: "Alice",
+  middleName: "Marie"
+};
+
+validate(user1, userValidator);
+// ✅ Passes validation
+
+const user2: unknown = {
+  name: "Bob",
+  middleName: null
+};
+
+validate(user2, userValidator);
+// ✅ Passes validation
+```
+
+### Nullable Fields
+
+```typescript
+import { object, number, null_, or, validate } from 'valleys';
+
+const productValidator = object({
+  id: number(),
+  discountPrice: or([number(), null_()]) // Can be a number or null
+});
+
+const product1: unknown = {
+  id: 123,
+  discountPrice: 19.99
+};
+
+validate(product1, productValidator);
+// ✅ Passes validation
+
+const product2: unknown = {
+  id: 456,
+  discountPrice: null // No discount
+};
+
+validate(product2, productValidator);
+// ✅ Passes validation
+```
+
+### Differentiating Null from Undefined
+
+```typescript
+import { null_, undefined_, validate } from 'valleys';
+
+const nullValidator = null_();
+const undefinedValidator = undefined_();
+
+validate(null, nullValidator);
+// ✅ Passes validation
+
+validate(null, undefinedValidator);
+// Throws ValidationError: schema violation
+
+validate(undefined, nullValidator);
+// Throws ValidationError: schema violation
+
+validate(undefined, undefinedValidator);
+// ✅ Passes validation
+```
+
+### API Response with Null Values
+
+```typescript
+import { object, string, number, null_, or, validate } from 'valleys';
+
+const apiResponseValidator = object({
+  userId: number(),
+  lastLogin: or([string(), null_()]), // ISO date string or null if never logged in
+  profilePicture: or([string(), null_()]) // URL or null if no picture
+});
+
+const response: unknown = {
+  userId: 42,
+  lastLogin: "2024-01-15T10:30:00Z",
+  profilePicture: null
+};
+
+validate(response, apiResponseValidator);
+// ✅ Passes validation
+```
+
+### Union with Multiple Types
+
+```typescript
+import { or, string, number, null_, validate, InferOutputOf } from 'valleys';
+
+const valueValidator = or([string(), number(), null_()]);
+
+type Value = InferOutputOf<typeof valueValidator>; // string | number | null
+
+validate("hello", valueValidator);
+// ✅ Passes validation
+
+validate(42, valueValidator);
+// ✅ Passes validation
+
+validate(null, valueValidator);
+// ✅ Passes validation
+
+validate(true, valueValidator);
+// Throws ValidationError: schema violation
+```
+
+## Validation Behavior
+
+1. **Strict Equality Check**: Uses strict equality (`input !== null`) to verify the input is exactly `null`
+2. No type coercion is performed
+3. No additional rules are applied
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not the literal `null` value
+
+## Notes
+
+- The function is named `null_()` with an underscore suffix because `null` is a reserved keyword
+- Uses strict equality, so only the literal `null` value passes validation
+- `undefined`, `0`, `false`, and `""` are NOT considered equal to `null` and will fail validation
+- Commonly used with `or()` to create nullable fields
+- Different from `undefined_()` which validates the `undefined` value

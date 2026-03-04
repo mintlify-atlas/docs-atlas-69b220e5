@@ -1,0 +1,254 @@
+---
+title: 'object()'
+description: 'Validate object values with typed fields'
+---
+
+## Overview
+
+Creates a validator that validates object values with typed fields. Supports nested objects and optional fields.
+
+## Function Signatures
+
+```typescript
+function object(): Validator<
+  Record<string, unknown>,
+  { type: "object"; properties: Record<string, { type: string }> }
+>
+```
+
+```typescript
+function object<T extends Record<string, Validator<any, any, any>>>(
+  fields: T
+): Validator<
+  ObjectValidatorType<T>,
+  { type: "object"; properties: { [K in keyof T]: T[K]["schema"] } }
+> & {
+  fields: T;
+}
+```
+
+## Parameters
+
+<ParamField path="fields" type="Record<string, Validator<any>>" optional>
+  Optional object mapping property names to their validators. Each key represents a property name, and its value is the validator for that property.
+  
+  When omitted, creates a validator that accepts any object and returns `Record<string, unknown>`.
+  
+  When provided, the output type is automatically inferred based on the validators:
+  - Required fields: properties with non-optional validators
+  - Optional fields: properties with validators that output `undefined` as part of their type
+</ParamField>
+
+## Returns
+
+Returns a `Validator` that validates object values:
+- Without fields: accepts any non-null object and returns `Record<string, unknown>`
+- With fields: validates each specified property and returns a precisely typed object
+
+The returned validator also includes a `fields` property containing the original field validators.
+
+## Basic Usage
+
+```typescript
+import { object, string, number, boolean } from 'valleys';
+
+// Object without field validation
+const anyObject = object();
+// Type: Validator<Record<string, unknown>>
+
+// Object with typed fields
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean()
+});
+// Type: Validator<{
+//   id: number;
+//   name: string;
+//   email: string;
+//   isActive: boolean;
+// }>
+```
+
+## Type Inference
+
+The `object()` validator automatically infers the correct TypeScript type:
+
+```typescript
+import { object, string, number, InferOutputOf } from 'valleys';
+
+const productValidator = object({
+  id: number(),
+  name: string(),
+  price: number(),
+  description: string()
+});
+
+type Product = InferOutputOf<typeof productValidator>;
+// type Product = {
+//   id: number;
+//   name: string;
+//   price: number;
+//   description: string;
+// }
+```
+
+## Optional Fields
+
+Use `or()` with `undefined_()` to create optional fields:
+
+```typescript
+import { object, string, number, or, undefined_ } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  nickname: or([string(), undefined_()]) // Optional field
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   nickname?: string | undefined;
+// }
+```
+
+## Nested Objects
+
+Objects can be nested to validate complex structures:
+
+```typescript
+import { object, string, number, array } from 'valleys';
+
+const orderValidator = object({
+  orderId: number(),
+  customer: object({
+    name: string(),
+    email: string(),
+    address: object({
+      street: string(),
+      city: string(),
+      zipCode: string()
+    })
+  }),
+  items: array(
+    object({
+      productId: number(),
+      quantity: number(),
+      price: number()
+    })
+  )
+});
+
+type Order = InferOutputOf<typeof orderValidator>;
+// type Order = {
+//   orderId: number;
+//   customer: {
+//     name: string;
+//     email: string;
+//     address: {
+//       street: string;
+//       city: string;
+//       zipCode: string;
+//     };
+//   };
+//   items: Array<{
+//     productId: number;
+//     quantity: number;
+//     price: number;
+//   }>;
+// }
+```
+
+## Validation with Rules
+
+Combine object validation with field-level rules:
+
+```typescript
+import { object, string, number } from 'valleys';
+
+const registrationValidator = object({
+  username: string({ minLength: 3, maxLength: 20 }),
+  age: number({ min: 18, max: 120 }),
+  email: string()
+});
+```
+
+## Validation Behavior
+
+The validator performs the following checks:
+
+1. **Type check**: Ensures the value is a non-null object (not an array)
+2. **Field validation**: Validates each specified field in order. Returns an error at the first invalid field.
+
+```typescript
+import { object, string, number, validate } from 'valleys';
+
+const validator = object({
+  name: string(),
+  age: number()
+});
+
+// Valid
+validate({ name: 'Alice', age: 30 }, validator); // ✓
+
+// Invalid - not an object
+validate('not an object', validator); // ✗ schema-violation
+
+// Invalid - null
+validate(null, validator); // ✗ schema-violation
+
+// Invalid - array
+validate(['array'], validator); // ✗ schema-violation
+
+// Invalid - wrong field type
+validate({ name: 'Alice', age: 'thirty' }, validator); // ✗ object-property error at "age"
+
+// Note: Extra fields are allowed
+validate({ name: 'Alice', age: 30, extra: 'field' }, validator); // ✓
+```
+
+## Error Messages
+
+Validation errors provide specific field information:
+
+```typescript
+import { object, string, number, validate } from 'valleys';
+
+const validator = object({
+  name: string(),
+  age: number()
+});
+
+try {
+  validate({ name: 'Alice', age: 'not a number' }, validator);
+} catch (error) {
+  console.log(error.message);
+  // "Validation failed at age due to schema mismatch; expected schema: {"type":"number"}; received value: "not a number""
+}
+```
+
+## Accessing Field Validators
+
+The returned validator includes a `fields` property:
+
+```typescript
+import { object, string, number } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+
+// Access individual field validators
+const nameValidator = userValidator.fields.name;
+const ageValidator = userValidator.fields.age;
+```
+
+## See Also
+
+- [array()](/api/array) - Validate array values
+- [or()](/api/or) - Validate union types for optional fields
+- [InferOutputOf](/api/infer-output-of) - Extract output types from validators

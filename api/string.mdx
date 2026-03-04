@@ -1,0 +1,132 @@
+---
+title: 'string()'
+description: 'Creates a validator that validates string values'
+---
+
+## Function Signature
+
+```typescript
+function string(): Validator<string, { type: "string" }, {}>
+function string(rules?: {
+  minLength?: number;
+  maxLength?: number;
+}): Validator<string, { type: "string" }, { minLength?: number; maxLength?: number }>
+```
+
+## Description
+
+Creates a validator that validates string values. Accepts any valid JavaScript string and optionally enforces length constraints through rules.
+
+## Parameters
+
+<ParamField path="rules" type="object" optional>
+  Optional validation rules for the string
+  
+  <ParamField path="rules.minLength" type="number" optional>
+    Minimum allowed string length. If the string length is less than this value, validation fails with a rule violation error.
+  </ParamField>
+  
+  <ParamField path="rules.maxLength" type="number" optional>
+    Maximum allowed string length. If the string length is greater than this value, validation fails with a rule violation error.
+  </ParamField>
+</ParamField>
+
+## Returns
+
+Returns a `Validator<string>` that can be used to validate string values.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is:
+
+```typescript
+string
+```
+
+## Examples
+
+### Basic String Validation
+
+```typescript
+import { string, validate } from 'valleys';
+
+const nameValidator = string();
+
+const data: unknown = "Alice";
+validate(data, nameValidator);
+// data is now typed as string
+console.log(data); // "Alice"
+```
+
+### String with Minimum Length
+
+```typescript
+import { string, validate } from 'valleys';
+
+const usernameValidator = string({ minLength: 3 });
+
+validate("ab", usernameValidator);
+// Throws ValidationError: rule violation for minLength
+
+validate("alice", usernameValidator);
+// ✅ Passes validation
+```
+
+### String with Maximum Length
+
+```typescript
+import { string, validate } from 'valleys';
+
+const bioValidator = string({ maxLength: 200 });
+
+const bio = "A short bio";
+validate(bio, bioValidator);
+// ✅ Passes validation
+```
+
+### String with Both Min and Max Length
+
+```typescript
+import { string, validate } from 'valleys';
+
+const passwordValidator = string({ minLength: 8, maxLength: 128 });
+
+validate("pass", passwordValidator);
+// Throws ValidationError: rule violation for minLength
+
+validate("securePassword123", passwordValidator);
+// ✅ Passes validation
+```
+
+### Using with Objects
+
+```typescript
+import { object, string, validate } from 'valleys';
+
+const userValidator = object({
+  name: string({ minLength: 1 }),
+  email: string(),
+  bio: string({ maxLength: 500 })
+});
+
+const data: unknown = {
+  name: "Alice",
+  email: "alice@example.com",
+  bio: "Software developer"
+};
+
+validate(data, userValidator);
+// ✅ Passes validation
+```
+
+## Validation Behavior
+
+1. **Type Check**: First checks if the input is of type `string` using `typeof input !== "string"`
+2. **minLength Rule**: If specified, validates that `input.length >= minLength`
+3. **maxLength Rule**: If specified, validates that `input.length <= maxLength`
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not a string
+- **Rule Violation (minLength)**: Thrown when the string length is less than the specified `minLength`
+- **Rule Violation (maxLength)**: Thrown when the string length is greater than the specified `maxLength`

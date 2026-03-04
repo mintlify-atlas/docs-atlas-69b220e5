@@ -1,0 +1,315 @@
+---
+title: "InferOutputOf<T>"
+description: "Type utility that extracts the output type from a validator"
+---
+
+## Type Signature
+
+```typescript
+type InferOutputOf<D extends Validator<any, any, any>> =
+  D extends Validator<infer T, any, any> ? T : never;
+```
+
+## Description
+
+Utility type that extracts the output type from a validator. This allows you to get the TypeScript type that a validator will produce after successful validation.
+
+This is particularly useful when you need to:
+- Define types based on validators instead of duplicating type definitions
+- Create derived types from complex validator schemas
+- Ensure type consistency between runtime validation and compile-time types
+
+## Type Parameters
+
+<ParamField path="D" type="Validator<any, any, any>" required>
+  The validator type to extract the output type from. Must extend the `Validator` interface.
+</ParamField>
+
+## Returns
+
+<ResponseField name="return" type="Type">
+  The output type of the validator. If the validator produces type `T` after successful validation, `InferOutputOf<validator>` will be `T`.
+  
+  Returns `never` if the type parameter is not a valid `Validator` type.
+</ResponseField>
+
+## Examples
+
+### Simple Validator Types
+
+```typescript
+import { InferOutputOf, string, number, boolean } from 'valleys';
+
+const nameValidator = string();
+type Name = InferOutputOf<typeof nameValidator>;
+// type Name = string
+
+const ageValidator = number();
+type Age = InferOutputOf<typeof ageValidator>;
+// type Age = number
+
+const activeValidator = boolean();
+type IsActive = InferOutputOf<typeof activeValidator>;
+// type IsActive = boolean
+```
+
+### Object Types
+
+```typescript
+import { InferOutputOf, object, string, number, boolean } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean()
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   email: string;
+//   isActive: boolean;
+// }
+
+// Use the inferred type
+function processUser(user: User) {
+  console.log(user.name);
+  console.log(user.id + 1);
+}
+```
+
+### Array Types
+
+```typescript
+import { InferOutputOf, array, string, number } from 'valleys';
+
+const tagsValidator = array(string());
+type Tags = InferOutputOf<typeof tagsValidator>;
+// type Tags = string[]
+
+const scoresValidator = array(number());
+type Scores = InferOutputOf<typeof scoresValidator>;
+// type Scores = number[]
+```
+
+### Branded Types
+
+```typescript
+import { InferOutputOf, url, iso8601, UrlString, Iso8601String } from 'valleys';
+
+const urlValidator = url();
+type ValidatedUrl = InferOutputOf<typeof urlValidator>;
+// type ValidatedUrl = UrlString
+
+const dateValidator = iso8601();
+type ValidatedDate = InferOutputOf<typeof dateValidator>;
+// type ValidatedDate = Iso8601String
+```
+
+### Complex Nested Types
+
+```typescript
+import { InferOutputOf, object, array, string, number, boolean } from 'valleys';
+
+const postValidator = object({
+  id: number(),
+  title: string(),
+  content: string(),
+  tags: array(string()),
+  author: object({
+    id: number(),
+    name: string(),
+    verified: boolean()
+  })
+});
+
+type Post = InferOutputOf<typeof postValidator>;
+// type Post = {
+//   id: number;
+//   title: string;
+//   content: string;
+//   tags: string[];
+//   author: {
+//     id: number;
+//     name: string;
+//     verified: boolean;
+//   };
+// }
+```
+
+### Union Types with or()
+
+```typescript
+import { InferOutputOf, or, string, number } from 'valleys';
+
+const idValidator = or([string(), number()]);
+type Id = InferOutputOf<typeof idValidator>;
+// type Id = string | number
+```
+
+### Optional Properties
+
+```typescript
+import { InferOutputOf, object, string, or, undefined_ } from 'valleys';
+
+const configValidator = object({
+  required: string(),
+  optional: or([string(), undefined_()])
+});
+
+type Config = InferOutputOf<typeof configValidator>;
+// type Config = {
+//   required: string;
+//   optional?: string | undefined;
+// }
+```
+
+### Reusable Type Definitions
+
+```typescript
+import { InferOutputOf, object, string, number, array } from 'valleys';
+
+// Define validator once
+const addressValidator = object({
+  street: string(),
+  city: string(),
+  zipCode: string()
+});
+
+// Extract type for reuse
+type Address = InferOutputOf<typeof addressValidator>;
+
+// Use in other validators
+const userValidator = object({
+  name: string(),
+  addresses: array(addressValidator)
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   name: string;
+//   addresses: Address[];
+// }
+
+// Use in function signatures
+function formatAddress(address: Address): string {
+  return `${address.street}, ${address.city} ${address.zipCode}`;
+}
+```
+
+### Building API Response Types
+
+```typescript
+import { InferOutputOf, object, array, string, number, iso8601 } from 'valleys';
+
+const apiResponseValidator = object({
+  data: array(object({
+    id: number(),
+    name: string(),
+    createdAt: iso8601()
+  })),
+  meta: object({
+    total: number(),
+    page: number(),
+    pageSize: number()
+  })
+});
+
+type ApiResponse = InferOutputOf<typeof apiResponseValidator>;
+// type ApiResponse = {
+//   data: {
+//     id: number;
+//     name: string;
+//     createdAt: Iso8601String;
+//   }[];
+//   meta: {
+//     total: number;
+//     page: number;
+//     pageSize: number;
+//   };
+// }
+
+async function fetchData(): Promise<ApiResponse> {
+  const response = await fetch('/api/data');
+  const json: unknown = await response.json();
+  validate(json, apiResponseValidator);
+  return json;
+}
+```
+
+## Benefits
+
+### Single Source of Truth
+
+Define your schema once with validators, and derive TypeScript types from them:
+
+```typescript
+// ✅ Good: Schema defined once
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+type User = InferOutputOf<typeof userValidator>;
+
+// ❌ Avoid: Duplicating the structure
+type User = {
+  name: string;
+  age: number;
+};
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+```
+
+### Type Safety
+
+Changes to validators automatically reflect in types:
+
+```typescript
+const validator = object({
+  name: string(),
+  // Later add a field
+  email: string()
+});
+
+type Data = InferOutputOf<typeof validator>;
+// TypeScript will now require 'email' wherever Data is used
+```
+
+## Implementation Details
+
+From `index.ts:62-63`:
+
+```typescript
+export type InferOutputOf<D extends Validator<any, any, any>> =
+  D extends Validator<infer T, any, any> ? T : never;
+```
+
+The type uses TypeScript's conditional types and `infer` keyword to extract the first type parameter from the `Validator` interface:
+
+1. Check if `D` extends `Validator<infer T, any, any>`
+2. If yes, extract the type `T` (the output type)
+3. If no, return `never`
+
+The `Validator` interface is defined as:
+
+```typescript
+type Validator<
+  Output,
+  Schema extends { type: string } = { type: string },
+  RuleSet extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  unstable_validate: (input: unknown) => { value: Output } | { error: ... };
+  schema: Schema;
+  rules: RuleSet;
+};
+```
+
+## See Also
+
+- [validate()](/api/validate) - Assertion-based validation function
+- [Validators](/concepts/validators) - The base validator interface
+- [object()](/api/object) - Object validator for complex types

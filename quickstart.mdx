@@ -1,80 +1,358 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with Valleys in minutes with this comprehensive quickstart guide
 ---
 
-## Get started in three steps
+This guide will walk you through the basics of using Valleys to validate runtime data in your TypeScript applications.
 
-Get your documentation site running locally and make your first customization.
+## Basic validation
 
-### Step 1: Set up your local environment
+Valleys validates your data and narrows its type in-place. The `validate` function runs a runtime check and asserts the type on success.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+### Validating primitives
 
-### Step 2: Deploy your changes
+Start by validating basic types like strings, numbers, and booleans:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```typescript
+import { string, number, boolean, validate } from "valleys";
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+// Validate a string
+const name: unknown = "Alice";
+validate(name, string());
+console.log(name); // TypeScript knows name is a string
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+// Validate a number
+const age: unknown = 25;
+validate(age, number());
+console.log(age); // TypeScript knows age is a number
 
-### Step 3: Go live
+// Validate a boolean
+const isActive: unknown = true;
+validate(isActive, boolean());
+console.log(isActive); // TypeScript knows isActive is a boolean
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+### Validating objects
+
+Validate objects with specific shapes using the `object()` validator:
+
+```typescript
+import { object, string, number, validate } from "valleys";
+
+// Example of untrusted data (e.g., from an API)
+const input: unknown = { id: 123, name: "Alice" };
+
+// Validate the data (throws if validation fails)
+validate(input, object({ id: number(), name: string() }));
+
+// `input` is now typed as { id: number; name: string }
+console.log(input.id, input.name);
+```
+
+### Validating arrays
+
+Validate arrays with optional item type validation:
+
+```typescript
+import { array, string, validate } from "valleys";
+
+// Array of any values
+const items: unknown = [1, 2, 3];
+validate(items, array());
+// items is typed as unknown[]
+
+// Array of specific type
+const tags: unknown = ["javascript", "typescript", "nodejs"];
+validate(tags, array(string()));
+// tags is typed as string[]
+```
+
+## Validation rules
+
+Many validators support optional rules for more specific validation.
+
+### String rules
+
+Validate string length constraints:
+
+```typescript
+import { string, validate } from "valleys";
+
+// With rules
+const username: unknown = "alice";
+validate(username, string({ minLength: 3, maxLength: 50 }));
+```
+
+### Number rules
+
+Validate number ranges:
+
+```typescript
+import { number, validate } from "valleys";
+
+// With rules
+const score: unknown = 85;
+validate(score, number({ min: 0, max: 100 }));
+```
+
+### Array rules
+
+Validate array length:
+
+```typescript
+import { array, number, validate } from "valleys";
+
+// Array of specific type with rules
+const scores: unknown = [85, 90, 95];
+validate(scores, array(number(), { minLength: 3 }));
+// scores is typed as number[] with at least 3 items
+```
+
+## Advanced validation
+
+### Nested objects
+
+Validate complex nested structures:
+
+```typescript
+import { object, string, number, validate } from "valleys";
+
+const input: unknown = {
+  user: {
+    id: 123,
+    profile: { name: "Alice", age: 25 }
+  }
+};
+
+validate(
+  input,
+  object({
+    user: object({
+      id: number(),
+      profile: object({ name: string(), age: number() })
+    })
+  })
+);
+
+// TypeScript now knows the full nested structure
+console.log(input.user.profile.name);
+```
+
+### Union types
+
+Create validators that accept multiple types using `or()`:
+
+```typescript
+import { or, string, number, null_, validate } from "valleys";
+
+// String or number
+const value: unknown = "hello";
+validate(value, or([string(), number()]));
+// value is typed as string | number
+
+// Nullable string (string or null)
+const nullableValue: unknown = null;
+validate(nullableValue, or([string(), null_()]));
+// nullableValue is typed as string | null
+```
+
+### Literal values
+
+Validate exact literal values using `constant()`:
+
+```typescript
+import { or, constant, validate } from "valleys";
+
+// Status can only be one of three specific values
+const status: unknown = "active";
+validate(
+  status,
+  or([constant("pending"), constant("active"), constant("completed")])
+);
+// status is typed as "pending" | "active" | "completed"
+```
+
+### Special types
+
+Validate URLs and ISO 8601 date strings:
+
+```typescript
+import { url, iso8601, validate } from "valleys";
+
+// Validate URL
+const websiteUrl: unknown = "https://example.com/path";
+validate(websiteUrl, url());
+// websiteUrl is typed as UrlString (a branded string type)
+
+// Validate ISO 8601 datetime
+const timestamp: unknown = "2024-01-15T10:30:00Z";
+validate(timestamp, iso8601());
+// timestamp is typed as Iso8601String (a branded string type)
+```
+
+## Error handling
+
+When validation fails, Valleys throws a `ValidationError` with a descriptive message.
+
+### Basic error handling
+
+```typescript
+import { validate, object, string, number, ValidationError } from "valleys";
+
+const input: unknown = { name: "Alice", age: "ten" };
+
+try {
+  validate(input, object({ name: string(), age: number() }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // Validation failed at age due to schema mismatch; expected schema: {"type":"number"}; received value: "ten"
+  }
+}
+```
+
+### Structured error information
+
+Access the structured error tree for custom error handling:
+
+```typescript
+import { validate, object, string, number, ValidationError } from "valleys";
+
+try {
+  validate(input, object({ name: string(), age: number() }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Access the structured error tree
+    console.log(error.experimental_root);
+  }
+}
+```
+
+<Note>
+Valleys follows a fail-fast approach, immediately throwing when validation fails. This provides better performance and clearer error messages by focusing on the first issue encountered.
+</Note>
+
+## Type inference
+
+Extract TypeScript types from your validators using the `InferOutputOf` utility type.
+
+### Basic type inference
+
+```typescript
+import { string, number, InferOutputOf } from "valleys";
+
+// Simple validator types
+const nameValidator = string();
+type Name = InferOutputOf<typeof nameValidator>; // string
+
+const ageValidator = number();
+type Age = InferOutputOf<typeof ageValidator>; // number
+```
+
+### Complex type inference
+
+```typescript
+import { object, string, number, boolean, array, InferOutputOf } from "valleys";
+
+// Complex object type
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean(),
+  tags: array(string())
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   email: string;
+//   isActive: boolean;
+//   tags: string[];
+// }
+
+// Use the inferred type in your application
+function processUser(user: User) {
+  console.log(`Processing user: ${user.name}`);
+}
+
+const data: unknown = fetchUserData();
+validate(data, userValidator);
+processUser(data); // ✅ TypeScript knows data matches User type
+```
+
+## Real-world example
+
+Here's a complete example of validating API response data:
+
+<Steps>
+  <Step title="Define your validator">
+    Create a validator that matches your expected API response:
+
+    ```typescript
+    import { object, string, number, boolean, array, validate } from "valleys";
+
+    const userValidator = object({
+      id: number(),
+      name: string(),
+      email: string(),
+      isActive: boolean(),
+      tags: array(string())
+    });
+    ```
+  </Step>
+
+  <Step title="Fetch and validate data">
+    Fetch data from your API and validate it:
+
+    ```typescript
+    async function fetchUser(userId: number) {
+      const response = await fetch(`/api/users/${userId}`);
+      const data: unknown = await response.json();
+
+      // Validate the response data
+      validate(data, userValidator);
+
+      // TypeScript now knows data is { id: number; name: string; ... }
+      return data;
+    }
+    ```
+  </Step>
+
+  <Step title="Handle errors gracefully">
+    Wrap validation in error handling:
+
+    ```typescript
+    import { ValidationError } from "valleys";
+
+    async function fetchUser(userId: number) {
+      try {
+        const response = await fetch(`/api/users/${userId}`);
+        const data: unknown = await response.json();
+
+        validate(data, userValidator);
+        return data;
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          console.error("Invalid API response:", error.message);
+          throw new Error("The API returned invalid data");
+        }
+        throw error;
+      }
+    }
+    ```
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you understand the basics, you can:
 
-<CardGroup cols={2}>
+- Explore all available validators in the API reference
+- Learn about advanced validation patterns
+- Integrate Valleys into your existing TypeScript projects
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
+<Card title="API Reference" icon="book" href="/api/validate">
+  Explore the complete API documentation for all validators and utilities
 </Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

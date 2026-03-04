@@ -1,0 +1,208 @@
+---
+title: "iso8601()"
+description: "Validates ISO 8601 date-time strings and returns a branded Iso8601String type"
+---
+
+## Function Signature
+
+```typescript
+function iso8601(): Validator<Iso8601String, { type: "iso8601" }>
+```
+
+## Description
+
+Creates a validator that validates ISO 8601 date-time strings. The validator accepts datetime strings in the format: `YYYY-MM-DDTHH:mm:ss[.sss][Z|±HH:mm]`.
+
+The validator performs two checks:
+1. The string must match the ISO 8601 format regex pattern
+2. The string must be parseable as a valid date (not NaN when parsed)
+
+Returns a branded `Iso8601String` type that provides compile-time guarantees that the string has been validated as an ISO 8601 datetime.
+
+## Returns
+
+<ResponseField name="return" type="Validator<Iso8601String, { type: 'iso8601' }>">
+  A validator that accepts valid ISO 8601 datetime strings and returns the `Iso8601String` branded type.
+  
+  The validator has the following properties:
+  - `schema`: `{ type: "iso8601" }`
+  - `rules`: `{}`
+  - `unstable_validate`: Function that validates the input
+</ResponseField>
+
+## Branded Type
+
+```typescript
+type Iso8601String = Brand<string, "Iso8601String">
+```
+
+The `Iso8601String` type is a branded string type that indicates the value has been validated as an ISO 8601 datetime string. This provides type-level guarantees without runtime overhead.
+
+## Validation Behavior
+
+- **Accepts**: Strings matching the ISO 8601 format that parse to valid dates
+  - Format: `YYYY-MM-DDTHH:mm:ss[.sss][Z|±HH:mm]`
+  - Examples: `2024-03-15T10:30:00Z`, `2024-03-15T10:30:00.123+05:30`
+- **Rejects**: 
+  - Non-string values
+  - Strings not matching the ISO 8601 format
+  - Strings that match the format but don't parse to valid dates
+
+## Format Pattern
+
+The validator uses the following regex pattern:
+
+```typescript
+/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[.]\d+)?(?:Z|[+-]\d{2}:?\d{2})$/
+```
+
+This pattern accepts:
+- Date: `YYYY-MM-DD`
+- Time separator: `T`
+- Time: `HH:mm:ss`
+- Optional fractional seconds: `.sss` (one or more digits)
+- Timezone: Either `Z` (UTC) or offset like `+05:30` or `+0530`
+
+## Error Structure
+
+When validation fails, the validator returns a schema violation error:
+
+```typescript
+{
+  type: "schema-violation",
+  data: input,  // The invalid value that was provided
+  context: {
+    schema: { type: "iso8601" },
+    rules: {}
+  }
+}
+```
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { iso8601, validate } from 'valleys';
+
+const dateValidator = iso8601();
+
+// Valid ISO 8601 strings
+validate('2024-03-15T10:30:00Z', dateValidator);
+validate('2024-03-15T10:30:00.123Z', dateValidator);
+validate('2024-03-15T10:30:00+05:30', dateValidator);
+validate('2024-03-15T10:30:00-08:00', dateValidator);
+
+// Invalid - throws ValidationError
+validate('2024-03-15', dateValidator); // Missing time
+validate('2024-03-15 10:30:00', dateValidator); // Space instead of 'T'
+validate('not a date', dateValidator); // Invalid format
+validate('2024-13-45T99:99:99Z', dateValidator); // Invalid date values
+```
+
+### With Object Validator
+
+```typescript
+import { object, iso8601, string, number } from 'valleys';
+
+const eventValidator = object({
+  id: number(),
+  name: string(),
+  createdAt: iso8601(),
+  updatedAt: iso8601()
+});
+
+validate({
+  id: 1,
+  name: 'Conference',
+  createdAt: '2024-03-15T10:30:00Z',
+  updatedAt: '2024-03-15T14:20:00Z'
+}, eventValidator);
+```
+
+### Type Inference
+
+```typescript
+import { iso8601, InferOutputOf } from 'valleys';
+
+const dateValidator = iso8601();
+
+type ValidatedDate = InferOutputOf<typeof dateValidator>;
+// type ValidatedDate = Iso8601String
+
+// The branded type is assignable to string
+const timestamp: ValidatedDate = '2024-03-15T10:30:00Z' as Iso8601String;
+const regularString: string = timestamp; // ✅ Works
+
+// Can be converted to Date object
+const date = new Date(timestamp);
+```
+
+### Converting to Date Object
+
+```typescript
+import { iso8601, validate } from 'valleys';
+
+const dateString = '2024-03-15T10:30:00Z';
+validate(dateString, iso8601());
+
+// After validation, safe to convert to Date
+const date = new Date(dateString);
+console.log(date.toISOString()); // '2024-03-15T10:30:00.000Z'
+```
+
+## Implementation Details
+
+From `index.ts:548-594`:
+
+```typescript
+export type Iso8601String = Brand<string, "Iso8601String">;
+
+const iso8601Regex =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[.]\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
+
+export function iso8601(): Validator<Iso8601String, { type: "iso8601" }> {
+  const schema = { type: "iso8601" } as const;
+  const rules = {};
+
+  return {
+    unstable_validate: (input: unknown) => {
+      if (typeof input !== "string" || !iso8601Regex.test(input)) {
+        return {
+          error: {
+            type: "schema-violation",
+            data: input,
+            context: {
+              schema: schema,
+              rules: rules,
+            },
+          },
+        };
+      }
+      const date = new Date(input);
+      if (Number.isNaN(date.getTime())) {
+        return {
+          error: {
+            type: "schema-violation",
+            data: input,
+            context: {
+              schema: schema,
+              rules: rules,
+            },
+          },
+        };
+      }
+      return { value: input as Iso8601String };
+    },
+    schema: schema,
+    rules: rules,
+  };
+}
+```
+
+## See Also
+
+- [url()](/api/url) - Validator for URL strings
+- [string()](/api/string) - General string validator with length rules
+- [validate()](/api/validate) - Assertion-based validation function
+- [ValidationError](/api/validation-error) - Error class for validation failures

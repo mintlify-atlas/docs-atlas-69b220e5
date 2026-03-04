@@ -1,0 +1,176 @@
+---
+title: Performance
+description: Understanding Valleys' performance characteristics and why it's faster than alternatives
+---
+
+## Why Valleys is Fast
+
+Valleys achieves exceptional performance through a fundamentally different approach to validation: **assertion-based validation without cloning**.
+
+While libraries like Zod, Valibot, and Decoders typically return a new (often transformed) value from `.parse()`, Valleys instead asserts types directly. This provides several key performance benefits:
+
+- **Zero-copy validation** - No time spent copying arrays, strings, or nested objects
+- **In-place type refinement** - Your original values remain unchanged, only TypeScript types are refined
+- **Minimal runtime overhead** - No object allocation or transformation costs
+- **Fail-fast approach** - Immediately throws when validation fails, avoiding unnecessary work
+
+## Benchmark Results
+
+Early benchmarks demonstrate that Valleys consistently outperforms other validation libraries across different environments and scenarios.
+
+### Performance vs Zod
+
+Comprehensive benchmarks using the official Zod 4 vs Zod 3 test suite show:
+
+- **Basic validation**: ~1.5-2x faster than Zod 4 for simple string and number validation
+- **With validation rules**: **20-30x faster** when checking constraints like:
+  - String length limits (`minLength`, `maxLength`)
+  - Number ranges (`min`, `max`)
+  - Array sizes (`minLength`)
+
+View detailed benchmarks: [Valleys vs Zod](https://github.com/nimeshnayaju/zod?tab=readme-ov-file#benchmarks)
+
+### Cross-Runtime Performance
+
+Benchmarks across Node.js, Bun, and Deno environments (forked from [@naruaway's benchmarks](https://github.com/naruaway)) show Valleys outperforming both Zod 4 and Valibot:
+
+View detailed benchmarks: [Valleys vs Zod vs Valibot](https://github.com/nimeshnayaju/valibot-benchmarks?tab=readme-ov-file#relative-performance-valleys-vs-others)
+
+## When Performance Matters Most
+
+Valleys is ideal for performance-critical applications where memory efficiency and speed are essential:
+
+### High-Throughput APIs
+
+```typescript
+import { validate, object, string, number } from "valleys";
+
+const requestValidator = object({
+  userId: number(),
+  action: string(),
+  timestamp: number()
+});
+
+app.post("/api/events", (req, res) => {
+  // Fast validation with zero cloning overhead
+  validate(req.body, requestValidator);
+  
+  // req.body is now safely typed
+  processEvent(req.body);
+});
+```
+
+### Real-Time Data Processing
+
+```typescript
+import { validate, array, object, number } from "valleys";
+
+const metricsValidator = array(object({
+  value: number({ min: 0 }),
+  timestamp: number()
+}), { minLength: 1 });
+
+// Process streaming metrics without allocation overhead
+webSocket.on("message", (data) => {
+  validate(data, metricsValidator);
+  aggregateMetrics(data); // No cloned data
+});
+```
+
+### Large Dataset Validation
+
+```typescript
+import { validate, array, object, string, number } from "valleys";
+
+const recordValidator = array(object({
+  id: string(),
+  value: number(),
+  category: string()
+}));
+
+// Validate large arrays without copying every element
+const records = await fetchLargeDataset();
+validate(records, recordValidator);
+// Original array is validated in-place
+```
+
+## Performance Characteristics
+
+### Memory Usage
+
+Since Valleys performs in-place validation without cloning:
+
+- **No duplicate data structures** - Memory usage scales linearly with input size only
+- **No intermediate allocations** - Validation doesn't create temporary objects
+- **Garbage collection friendly** - Minimal pressure on GC
+
+### Validation Rules
+
+The performance advantage becomes more pronounced with validation rules:
+
+```typescript
+import { validate, string, number, array } from "valleys";
+
+// These constraints validate extremely fast
+validate(input, string({ minLength: 3, maxLength: 50 }));
+validate(input, number({ min: 0, max: 100 }));
+validate(input, array(string(), { minLength: 1 }));
+```
+
+Validation rules are checked efficiently without object transformation overhead, leading to the 20-30x performance improvement over alternatives.
+
+### Nested Objects
+
+Nested validation maintains performance benefits:
+
+```typescript
+import { validate, object, string, number, array } from "valleys";
+
+const validator = object({
+  user: object({
+    id: number(),
+    profile: object({
+      name: string(),
+      email: string(),
+      tags: array(string())
+    })
+  })
+});
+
+// No cloning at any nesting level
+validate(data, validator);
+```
+
+## Fail-Fast Error Handling
+
+Valleys uses a fail-fast approach that enhances performance:
+
+```typescript
+import { validate, ValidationError, object, string, number } from "valleys";
+
+try {
+  validate(input, object({ name: string(), age: number() }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Only the first validation failure is reported
+    console.log(error.message);
+    // Access structured error tree if needed
+    console.log(error.experimental_root);
+  }
+}
+```
+
+By throwing immediately on the first validation failure, Valleys avoids unnecessary validation work and provides clearer, more actionable error messages.
+
+## Comparison Summary
+
+| Feature | Valleys | Zod/Valibot |
+|---------|---------|-------------|
+| Validation approach | Assertion-based | Parse & transform |
+| Memory usage | Original data only | Cloned + original |
+| Basic validation | 1.5-2x faster | Baseline |
+| With rules | 20-30x faster | Baseline |
+| Object overhead | Zero copy | Full clone |
+| Error handling | Fail-fast | Varies |
+
+For applications where validation performance is critical, Valleys provides a significant advantage without sacrificing type safety or developer experience.

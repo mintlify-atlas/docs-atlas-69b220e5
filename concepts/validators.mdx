@@ -1,0 +1,293 @@
+---
+title: Validators
+description: Understanding how validators work in Valleys, including composition, schema, and rules
+---
+
+## Overview
+
+Validators are the core building blocks of Valleys. Each validator is responsible for checking whether a value matches a specific type and optionally enforces additional constraints through rules.
+
+## The Validator Type
+
+At its core, a validator is an object with three key properties:
+
+```typescript
+type Validator<
+  Output,
+  Schema extends { type: string } = { type: string },
+  RuleSet extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  unstable_validate: (input: unknown) =>
+    | { value: Output; error?: never }
+    | { value?: never; error: ErrorNode };
+  schema: Schema;
+  rules: RuleSet;
+};
+```
+
+### Schema
+
+The `schema` property describes the structural type that the validator checks. Every schema has a `type` field that identifies the validator:
+
+```typescript
+// String validator schema
+const stringValidator = string();
+console.log(stringValidator.schema); // { type: "string" }
+
+// Object validator schema includes property definitions
+const userValidator = object({
+  name: string(),
+  age: number()
+});
+console.log(userValidator.schema);
+// {
+//   type: "object",
+//   properties: {
+//     name: { type: "string" },
+//     age: { type: "number" }
+//   }
+// }
+```
+
+Schemas are hierarchical for complex validators like objects and arrays:
+
+```typescript
+const dataValidator = array(object({
+  id: number(),
+  tags: array(string())
+}));
+
+console.log(dataValidator.schema);
+// {
+//   type: "array",
+//   item: {
+//     type: "object",
+//     properties: {
+//       id: { type: "number" },
+//       tags: {
+//         type: "array",
+//         item: { type: "string" }
+//       }
+//     }
+//   }
+// }
+```
+
+### Rules
+
+Rules add additional validation constraints beyond the basic type check. Different validators support different rules:
+
+```typescript
+// String validators support minLength and maxLength
+const usernameValidator = string({ 
+  minLength: 3, 
+  maxLength: 20 
+});
+console.log(usernameValidator.rules);
+// { minLength: 3, maxLength: 20 }
+
+// Number validators support min and max
+const ageValidator = number({ 
+  min: 0, 
+  max: 120 
+});
+console.log(ageValidator.rules);
+// { min: 0, max: 120 }
+
+// Array validators support minLength
+const tagsValidator = array(string(), { minLength: 1 });
+console.log(tagsValidator.rules);
+// { minLength: 1 }
+```
+
+Not all validators have rules. Simple validators like `boolean()` and `null_()` only perform type checking:
+
+```typescript
+const boolValidator = boolean();
+console.log(boolValidator.rules); // {}
+```
+
+## Validator Composition
+
+Validators compose naturally to create complex validation schemas. This is one of Valleys' key strengths.
+
+### Object Composition
+
+Objects can contain any validator as property validators:
+
+```typescript
+const userValidator = object({
+  id: number(),
+  name: string({ minLength: 1 }),
+  email: string(),
+  isActive: boolean(),
+  tags: array(string())
+});
+```
+
+### Nested Objects
+
+Objects can be nested arbitrarily deep:
+
+```typescript
+const configValidator = object({
+  user: object({
+    name: string(),
+    age: number()
+  }),
+  settings: object({
+    theme: string(),
+    notifications: boolean()
+  })
+});
+```
+
+### Array Composition
+
+Arrays can validate their items using any validator:
+
+```typescript
+// Array of primitives
+const numbersValidator = array(number());
+
+// Array of objects
+const usersValidator = array(object({
+  id: number(),
+  name: string()
+}));
+
+// Nested arrays
+const matrixValidator = array(array(number()));
+```
+
+### Union Types with `or()`
+
+The `or()` validator allows values to match any of several validators:
+
+```typescript
+// Optional properties using or()
+const profileValidator = object({
+  name: string(),
+  age: or([number(), undefined_()])
+});
+
+// Multiple possible types
+const idValidator = or([string(), number()]);
+
+// Complex unions
+const valueValidator = or([
+  string(),
+  number(),
+  boolean(),
+  null_()
+]);
+```
+
+<Note>
+The `or()` validator tries each validator in order and returns the first successful match. Order matters if validators might both accept the same value.
+</Note>
+
+### Constant Values
+
+The `constant()` validator validates literal values:
+
+```typescript
+const statusValidator = or([
+  constant("pending"),
+  constant("approved"),
+  constant("rejected")
+]);
+```
+
+## Specialized Validators
+
+Valleys includes specialized validators for common formats:
+
+### URL Strings
+
+```typescript
+const urlValidator = url();
+// Returns UrlString, a branded string type
+```
+
+### ISO 8601 Dates
+
+```typescript
+const dateValidator = iso8601();
+// Validates format: YYYY-MM-DDTHH:mm:ss[.sss][Z|±HH:mm]
+// Returns Iso8601String, a branded string type
+```
+
+These validators return branded types to provide additional type safety in TypeScript.
+
+## Building Custom Validators
+
+While Valleys provides built-in validators, you can understand how they work by looking at the implementation. For example, the `boolean()` validator:
+
+```typescript
+export function boolean(): Validator<boolean, { type: "boolean" }, {}> {
+  const schema = { type: "boolean" } as const;
+  const rules = {};
+
+  return {
+    unstable_validate: (input: unknown) => {
+      if (typeof input !== "boolean") {
+        return {
+          error: {
+            type: "schema-violation",
+            data: input,
+            context: {
+              schema: schema,
+              rules: rules,
+            },
+          },
+        };
+      }
+      return { value: input };
+    },
+    schema: schema,
+    rules: rules,
+  };
+}
+```
+
+All validators follow this pattern:
+1. Define the schema describing the expected type
+2. Define any rules for additional constraints
+3. Return an object with `unstable_validate`, `schema`, and `rules`
+4. The validation function returns either `{ value }` or `{ error }`
+
+## Using Validators
+
+Validators are typically used with the `validate()` function for runtime validation:
+
+```typescript
+import { validate, object, string, number } from 'valleys';
+
+const userValidator = object({
+  name: string(),
+  age: number({ min: 0 })
+});
+
+try {
+  validate(unknownData, userValidator);
+  // TypeScript now knows unknownData is { name: string; age: number }
+  console.log(unknownData.name.toUpperCase());
+} catch (error) {
+  // Handle validation error
+  console.error('Invalid user data:', error.message);
+}
+```
+
+See [Error Handling](/concepts/error-handling) for details on working with validation errors and [Type Inference](/concepts/type-inference) for understanding TypeScript integration.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Type Inference" icon="code" href="/concepts/type-inference">
+    Learn how to extract TypeScript types from validators
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/concepts/error-handling">
+    Understand validation error structure and handling
+  </Card>
+</CardGroup>

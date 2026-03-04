@@ -1,0 +1,204 @@
+---
+title: 'constant()'
+description: 'Creates a validator that validates literal/constant values'
+---
+
+## Function Signature
+
+```typescript
+function constant<T extends string | number | boolean | symbol | undefined | null>(
+  value: T
+): Validator<T, { type: "constant"; value: string }, {}>
+```
+
+## Description
+
+Creates a validator that validates literal/constant values. Accepts only the exact value provided using strict equality (`===`). This is useful for validating specific literal values, discriminated union tags, or enum-like values.
+
+## Parameters
+
+<ParamField path="value" type="string | number | boolean | symbol | undefined | null" required>
+  The literal value to match against. Only inputs that are strictly equal (`===`) to this value will pass validation.
+</ParamField>
+
+## Returns
+
+Returns a `Validator<T>` where `T` is the exact literal type of the provided value.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is the exact literal type:
+
+```typescript
+const statusValidator = constant("active");
+type Status = InferOutputOf<typeof statusValidator>; // "active" (literal type)
+
+const countValidator = constant(42);
+type Count = InferOutputOf<typeof countValidator>; // 42 (literal type)
+```
+
+## Examples
+
+### String Literal Validation
+
+```typescript
+import { constant, validate } from 'valleys';
+
+const activeValidator = constant("active");
+
+const data: unknown = "active";
+validate(data, activeValidator);
+// data is now typed as "active" (literal type)
+console.log(data); // "active"
+
+validate("inactive", activeValidator);
+// Throws ValidationError: schema violation
+```
+
+### Number Literal Validation
+
+```typescript
+import { constant, validate } from 'valleys';
+
+const answerValidator = constant(42);
+
+const data: unknown = 42;
+validate(data, answerValidator);
+// data is now typed as 42 (literal type)
+
+validate(43, answerValidator);
+// Throws ValidationError: schema violation
+```
+
+### Boolean Literal Validation
+
+```typescript
+import { constant, validate } from 'valleys';
+
+const trueValidator = constant(true);
+
+validate(true, trueValidator);
+// ✅ Passes validation
+
+validate(false, trueValidator);
+// Throws ValidationError: schema violation
+```
+
+### Null Validation
+
+```typescript
+import { constant, validate } from 'valleys';
+
+const nullValidator = constant(null);
+
+validate(null, nullValidator);
+// ✅ Passes validation
+
+validate(undefined, nullValidator);
+// Throws ValidationError: schema violation
+```
+
+### Undefined Validation
+
+```typescript
+import { constant, validate } from 'valleys';
+
+const undefinedValidator = constant(undefined);
+
+validate(undefined, undefinedValidator);
+// ✅ Passes validation
+
+validate(null, undefinedValidator);
+// Throws ValidationError: schema violation
+```
+
+### Discriminated Unions
+
+```typescript
+import { object, constant, string, number, or, validate } from 'valleys';
+
+const successValidator = object({
+  type: constant("success"),
+  data: string()
+});
+
+const errorValidator = object({
+  type: constant("error"),
+  code: number()
+});
+
+const responseValidator = or([successValidator, errorValidator]);
+
+const successData: unknown = {
+  type: "success",
+  data: "Hello, world!"
+};
+
+validate(successData, responseValidator);
+// ✅ Passes validation
+
+const errorData: unknown = {
+  type: "error",
+  code: 404
+};
+
+validate(errorData, responseValidator);
+// ✅ Passes validation
+```
+
+### Status Enums
+
+```typescript
+import { or, constant, validate, InferOutputOf } from 'valleys';
+
+const statusValidator = or([
+  constant("draft"),
+  constant("published"),
+  constant("archived")
+]);
+
+type Status = InferOutputOf<typeof statusValidator>; // "draft" | "published" | "archived"
+
+const status: unknown = "published";
+validate(status, statusValidator);
+// ✅ Passes validation
+
+validate("deleted", statusValidator);
+// Throws ValidationError: schema violation
+```
+
+### API Version Validation
+
+```typescript
+import { object, constant, validate } from 'valleys';
+
+const apiRequestValidator = object({
+  version: constant("v2"),
+  endpoint: string()
+});
+
+const request: unknown = {
+  version: "v2",
+  endpoint: "/users"
+};
+
+validate(request, apiRequestValidator);
+// ✅ Passes validation
+```
+
+## Validation Behavior
+
+1. **Strict Equality Check**: Uses strict equality (`===`) to compare the input with the provided value
+2. No type coercion is performed
+3. The schema stores the string representation of the value using `String(value)`
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not strictly equal to the specified constant value
+
+## Notes
+
+- Uses strict equality (`===`), so `constant(0)` will not match `false` or `"0"`
+- The validator's schema stores a string representation of the value for error messages
+- Perfect for validating discriminated union tags and enum-like values
+- Can be combined with `or()` to create enum validators

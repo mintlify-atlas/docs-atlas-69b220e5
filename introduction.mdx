@@ -1,0 +1,161 @@
+---
+title: Introduction
+description: Learn about Valleys, a lightweight TypeScript validation library with zero dependencies and exceptional performance
+---
+
+Valleys is a lightweight, zero-dependency library for validating arbitrary runtime data in TypeScript. It provides assertion-based validation that refines your types in-place — no cloning, no transformations, and minimal runtime overhead.
+
+## What is Valleys?
+
+Valleys validates your data and narrows its type in-place. Your original values remain unchanged - only their TypeScript types are refined. The `validate` function runs a runtime check and, on success, asserts the original variable's type. On failure, it throws a `ValidationError`.
+
+```typescript
+import { object, string, number, validate } from "valleys";
+
+// Example of untrusted data (e.g., from an API)
+const input: unknown = { id: 123, name: "Alice" };
+
+// Validate the data (throws if validation fails)
+validate(input, object({ id: number(), name: string() }));
+
+// `input` is now typed as { id: number; name: string }
+console.log(input.id, input.name);
+```
+
+## Why use Valleys?
+
+### Zero dependencies
+
+Valleys has no external dependencies, keeping your bundle size small and your dependency tree clean.
+
+### Exceptional performance
+
+Libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [Decoders](https://decoders.cc/) typically return a new (often transformed) value from `.parse()`. Valleys instead asserts types directly - this provides several performance benefits as no time is spent copying arrays, strings or nested objects. This makes Valleys ideal for performance-critical applications where memory efficiency and speed matter.
+
+Early benchmarks suggest that Valleys consistently outperforms other validation libraries:
+
+- For basic validation like strings and numbers, Valleys is about **1.5-2x faster** than Zod 4
+- With validation rules (string length limits, number ranges, array sizes), Valleys becomes dramatically faster, often **20-30x faster** than alternatives
+
+<Note>
+Check out the [benchmarks](https://github.com/nimeshnayaju/zod?tab=readme-ov-file#benchmarks) comparing Valleys against Zod 4 and Valibot across different environments.
+</Note>
+
+### Type-safe validation
+
+Valleys leverages TypeScript's type system to provide full type inference. Once validation succeeds, TypeScript knows exactly what type your data is.
+
+```typescript
+import { object, string, number, boolean, array, validate } from "valleys";
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean(),
+  tags: array(string())
+});
+
+const data: unknown = fetchUserData();
+validate(data, userValidator);
+
+// TypeScript now knows the exact shape of data
+console.log(data.name); // ✅ No type errors
+console.log(data.email.toUpperCase()); // ✅ String methods available
+```
+
+### Fail-fast approach
+
+Valleys follows a fail-fast approach, immediately throwing when validation fails. This provides better performance and clearer error messages by focusing on the first issue encountered.
+
+## Key features
+
+### In-place type assertion
+
+Unlike other validation libraries that clone and transform your data, Valleys validates and narrows types in-place for maximum performance.
+
+### Comprehensive validators
+
+Valleys provides validators for all common types:
+
+- Primitives: `string()`, `number()`, `boolean()`
+- Special types: `url()`, `iso8601()`, `constant()`
+- Nullish values: `null_()`, `undefined_()`
+- Collections: `array()`, `object()`
+- Unions: `or()`
+
+### Validation rules
+
+Many validators support optional rules for more specific validation:
+
+```typescript
+import { string, number, array, validate } from "valleys";
+
+// String with length constraints
+validate(input, string({ minLength: 3, maxLength: 50 }));
+
+// Number with range constraints
+validate(input, number({ min: 0, max: 100 }));
+
+// Array with minimum length
+validate(input, array(string(), { minLength: 1 }));
+```
+
+### Structured error handling
+
+When validation fails, Valleys exposes a structured error system with an AST-like path that precisely indicates where validation failed.
+
+```typescript
+import { validate, object, string, number, ValidationError } from "valleys";
+
+try {
+  validate(input, object({ name: string(), age: number() }));
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Access the structured error tree
+    console.log(error.experimental_root);
+  }
+}
+```
+
+Example error message:
+
+```
+Validation failed at user.age due to schema mismatch; expected schema: {"type":"number"}; received value: "ten"
+```
+
+### Type inference utilities
+
+Extract TypeScript types from your validators using the `InferOutputOf` utility type:
+
+```typescript
+import { object, string, number, boolean, array, InferOutputOf } from "valleys";
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  isActive: boolean(),
+  tags: array(string())
+});
+
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   email: string;
+//   isActive: boolean;
+//   tags: string[];
+// }
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started by installing Valleys in your project
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Learn the basics with a complete quickstart guide
+  </Card>
+</CardGroup>

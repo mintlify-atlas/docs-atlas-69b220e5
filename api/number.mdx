@@ -1,0 +1,157 @@
+---
+title: 'number()'
+description: 'Creates a validator that validates number values'
+---
+
+## Function Signature
+
+```typescript
+function number(): Validator<number, { type: "number" }>
+function number(rules?: {
+  min?: number;
+  max?: number;
+}): Validator<number, { type: "number" }, { min?: number; max?: number }>
+```
+
+## Description
+
+Creates a validator that validates number values. Only accepts finite numbers - `NaN` and `Infinity` are rejected. Optionally enforces minimum and maximum value constraints through rules.
+
+## Parameters
+
+<ParamField path="rules" type="object" optional>
+  Optional validation rules for the number
+  
+  <ParamField path="rules.min" type="number" optional>
+    Minimum allowed value (inclusive). If the number is less than this value, validation fails with a rule violation error.
+  </ParamField>
+  
+  <ParamField path="rules.max" type="number" optional>
+    Maximum allowed value (inclusive). If the number is greater than this value, validation fails with a rule violation error.
+  </ParamField>
+</ParamField>
+
+## Returns
+
+Returns a `Validator<number>` that can be used to validate number values.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is:
+
+```typescript
+number
+```
+
+## Examples
+
+### Basic Number Validation
+
+```typescript
+import { number, validate } from 'valleys';
+
+const ageValidator = number();
+
+const data: unknown = 25;
+validate(data, ageValidator);
+// data is now typed as number
+console.log(data); // 25
+```
+
+### Rejecting NaN and Infinity
+
+```typescript
+import { number, validate } from 'valleys';
+
+const validator = number();
+
+validate(NaN, validator);
+// Throws ValidationError: schema violation
+
+validate(Infinity, validator);
+// Throws ValidationError: schema violation
+
+validate(-Infinity, validator);
+// Throws ValidationError: schema violation
+```
+
+### Number with Minimum Value
+
+```typescript
+import { number, validate } from 'valleys';
+
+const ageValidator = number({ min: 0 });
+
+validate(-5, ageValidator);
+// Throws ValidationError: rule violation for min
+
+validate(25, ageValidator);
+// ✅ Passes validation
+```
+
+### Number with Maximum Value
+
+```typescript
+import { number, validate } from 'valleys';
+
+const percentageValidator = number({ max: 100 });
+
+validate(150, percentageValidator);
+// Throws ValidationError: rule violation for max
+
+validate(75, percentageValidator);
+// ✅ Passes validation
+```
+
+### Number with Range (Min and Max)
+
+```typescript
+import { number, validate } from 'valleys';
+
+const scoreValidator = number({ min: 0, max: 100 });
+
+validate(-10, scoreValidator);
+// Throws ValidationError: rule violation for min
+
+validate(110, scoreValidator);
+// Throws ValidationError: rule violation for max
+
+validate(85, scoreValidator);
+// ✅ Passes validation
+```
+
+### Using with Objects
+
+```typescript
+import { object, number, validate } from 'valleys';
+
+const productValidator = object({
+  id: number(),
+  price: number({ min: 0 }),
+  quantity: number({ min: 1 }),
+  discount: number({ min: 0, max: 100 })
+});
+
+const data: unknown = {
+  id: 123,
+  price: 29.99,
+  quantity: 5,
+  discount: 10
+};
+
+validate(data, productValidator);
+// ✅ Passes validation
+```
+
+## Validation Behavior
+
+1. **Type Check**: First checks if the input is of type `number` using `typeof input !== "number"`
+2. **Finite Check**: Validates that the number is finite using `Number.isFinite(input)` (rejects `NaN`, `Infinity`, and `-Infinity`)
+3. **min Rule**: If specified, validates that `input >= min`
+4. **max Rule**: If specified, validates that `input <= max`
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not a number or is not finite (`NaN`, `Infinity`, `-Infinity`)
+- **Rule Violation (min)**: Thrown when the number is less than the specified `min`
+- **Rule Violation (max)**: Thrown when the number is greater than the specified `max`

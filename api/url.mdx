@@ -1,0 +1,146 @@
+---
+title: "url()"
+description: "Validates URL strings and returns a branded UrlString type"
+---
+
+## Function Signature
+
+```typescript
+function url(): Validator<UrlString, { type: "url" }, {}>
+```
+
+## Description
+
+Creates a validator that validates URL strings. The validator uses the built-in `URL.canParse()` method to determine if a string is a valid URL.
+
+Returns a branded `UrlString` type that provides compile-time guarantees that the string has been validated as a URL.
+
+## Returns
+
+<ResponseField name="return" type="Validator<UrlString, { type: 'url' }, {}>">
+  A validator that accepts valid URL strings and returns the `UrlString` branded type.
+  
+  The validator has the following properties:
+  - `schema`: `{ type: "url" }`
+  - `rules`: `{}`
+  - `unstable_validate`: Function that validates the input
+</ResponseField>
+
+## Branded Type
+
+```typescript
+type UrlString = Brand<string, "UrlString">
+```
+
+The `UrlString` type is a branded string type that indicates the value has been validated as a URL. This provides type-level guarantees without runtime overhead.
+
+## Validation Behavior
+
+- **Accepts**: Any string that can be successfully parsed by `URL.canParse()`
+- **Rejects**: Non-string values or strings that cannot be parsed as URLs
+
+## Error Structure
+
+When validation fails, the validator returns a schema violation error:
+
+```typescript
+{
+  type: "schema-violation",
+  data: input,  // The invalid value that was provided
+  context: {
+    schema: { type: "url" },
+    rules: {}
+  }
+}
+```
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { url, validate } from 'valleys';
+
+const urlValidator = url();
+
+// Valid URLs
+validate('https://example.com', urlValidator);
+validate('http://localhost:3000', urlValidator);
+validate('ftp://files.example.org/document.pdf', urlValidator);
+
+// Invalid - throws ValidationError
+validate('not a url', urlValidator); // Throws
+validate('example.com', urlValidator); // Throws (missing protocol)
+validate(12345, urlValidator); // Throws (not a string)
+```
+
+### With Object Validator
+
+```typescript
+import { object, url, string } from 'valleys';
+
+const websiteValidator = object({
+  name: string(),
+  homepage: url(),
+  repository: url()
+});
+
+validate({
+  name: 'My Project',
+  homepage: 'https://myproject.com',
+  repository: 'https://github.com/user/project'
+}, websiteValidator);
+```
+
+### Type Inference
+
+```typescript
+import { url, InferOutputOf } from 'valleys';
+
+const urlValidator = url();
+
+type ValidatedUrl = InferOutputOf<typeof urlValidator>;
+// type ValidatedUrl = UrlString
+
+// The branded type is assignable to string
+const myUrl: ValidatedUrl = 'https://example.com' as UrlString;
+const regularString: string = myUrl; // ✅ Works
+```
+
+## Implementation Details
+
+From `index.ts:272-295`:
+
+```typescript
+export function url(): Validator<UrlString, { type: "url" }, {}> {
+  const schema = { type: "url" } as const;
+  const rules = {};
+
+  return {
+    unstable_validate: (input: unknown) => {
+      if (typeof input !== "string" || !URL.canParse(input)) {
+        return {
+          error: {
+            type: "schema-violation",
+            data: input,
+            context: {
+              schema: schema,
+              rules: rules,
+            },
+          },
+        };
+      }
+      return { value: input as UrlString };
+    },
+    schema: schema,
+    rules: rules,
+  };
+}
+```
+
+## See Also
+
+- [iso8601()](/api/iso8601) - Validator for ISO 8601 date-time strings
+- [string()](/api/string) - General string validator with length rules
+- [validate()](/api/validate) - Assertion-based validation function
+- [ValidationError](/api/validation-error) - Error class for validation failures

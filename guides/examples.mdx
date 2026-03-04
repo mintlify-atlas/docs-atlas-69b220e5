@@ -1,0 +1,547 @@
+---
+title: Real-World Examples
+description: Practical usage patterns, best practices, and common scenarios for Valleys validation
+---
+
+## API Request Validation
+
+### Express.js Middleware
+
+```typescript
+import { Request, Response, NextFunction } from "express";
+import { validate, ValidationError, object, string, number } from "valleys";
+
+const createUserValidator = object({
+  name: string({ minLength: 1, maxLength: 100 }),
+  email: string(),
+  age: number({ min: 0, max: 150 })
+});
+
+function validateCreateUser(req: Request, res: Response, next: NextFunction) {
+  try {
+    validate(req.body, createUserValidator);
+    // req.body is now typed as { name: string; email: string; age: number }
+    next();
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      res.status(400).json({ error: error.message });
+    } else {
+      next(error);
+    }
+  }
+}
+
+app.post("/users", validateCreateUser, (req, res) => {
+  // req.body is safely typed here
+  const { name, email, age } = req.body;
+  // ... create user
+});
+```
+
+### Reusable Validation Middleware Factory
+
+```typescript
+import { Validator, validate, ValidationError, InferOutputOf } from "valleys";
+import { Request, Response, NextFunction } from "express";
+
+function validateBody<V extends Validator<any, any, any>>(
+  validator: V
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      validate(req.body, validator);
+      next();
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({ 
+          error: "Validation failed",
+          message: error.message 
+        });
+      } else {
+        next(error);
+      }
+    }
+  };
+}
+
+// Use with any validator
+app.post("/users", validateBody(createUserValidator), createUserHandler);
+app.post("/posts", validateBody(createPostValidator), createPostHandler);
+```
+
+## Database Records
+
+### Validating Query Results
+
+```typescript
+import { validate, object, number, string, array } from "valleys";
+
+const userRecordValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  created_at: number()
+});
+
+const userListValidator = array(userRecordValidator);
+
+async function fetchUsers() {
+  const result = await db.query("SELECT * FROM users");
+  
+  // Validate database results
+  validate(result.rows, userListValidator);
+  
+  // result.rows is now typed as Array<{ id: number; name: string; email: string; created_at: number }>
+  return result.rows;
+}
+```
+
+### Optional Fields with Unions
+
+```typescript
+import { validate, object, string, number, or, null_, undefined_ } from "valleys";
+
+const userProfileValidator = object({
+  id: number(),
+  name: string(),
+  bio: or([string(), null_()]), // nullable string
+  avatar_url: or([string(), undefined_()]), // optional string
+  age: or([number(), null_(), undefined_()]) // nullable and optional
+});
+
+function processUser(data: unknown) {
+  validate(data, userProfileValidator);
+  
+  // TypeScript knows the exact types:
+  // data.id: number
+  // data.name: string
+  // data.bio: string | null
+  // data.avatar_url: string | undefined
+  // data.age: number | null | undefined
+  
+  if (data.bio !== null) {
+    console.log(`Bio: ${data.bio}`);
+  }
+}
+```
+
+## WebSocket Messages
+
+### Real-Time Event Validation
+
+```typescript
+import { validate, ValidationError, object, string, or, constant } from "valleys";
+
+const messageValidator = object({
+  type: or([constant("chat"), constant("notification"), constant("system")]),
+  payload: object({
+    text: string(),
+    userId: string(),
+    timestamp: number()
+  })
+});
+
+webSocket.on("message", (data) => {
+  try {
+    validate(data, messageValidator);
+    
+    // data.type is "chat" | "notification" | "system"
+    switch (data.type) {
+      case "chat":
+        handleChatMessage(data.payload);
+        break;
+      case "notification":
+        handleNotification(data.payload);
+        break;
+      case "system":
+        handleSystemMessage(data.payload);
+        break;
+    }
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      console.error("Invalid message:", error.message);
+      webSocket.send(JSON.stringify({ error: "Invalid message format" }));
+    }
+  }
+});
+```
+
+## Configuration Files
+
+### Application Config Validation
+
+```typescript
+import { validate, object, string, number, boolean, or } from "valleys";
+import * as fs from "fs";
+
+const configValidator = object({
+  server: object({
+    port: number({ min: 1, max: 65535 }),
+    host: string(),
+    ssl: boolean()
+  }),
+  database: object({
+    url: string(),
+    maxConnections: number({ min: 1 }),
+    timeout: number({ min: 0 })
+  }),
+  logging: object({
+    level: or([
+      constant("debug"),
+      constant("info"),
+      constant("warn"),
+      constant("error")
+    ]),
+    format: or([constant("json"), constant("text")])
+  })
+});
+
+function loadConfig(path: string) {
+  const raw = JSON.parse(fs.readFileSync(path, "utf-8"));
+  validate(raw, configValidator);
+  
+  // raw is now fully typed with exact literal types for enums
+  return raw;
+}
+
+const config = loadConfig("./config.json");
+// config.server.port is number
+// config.logging.level is "debug" | "info" | "warn" | "error"
+```
+
+## External API Responses
+
+### GitHub API Response
+
+```typescript
+import { validate, object, string, number, boolean, array, or, null_ } from "valleys";
+
+const githubUserValidator = object({
+  login: string(),
+  id: number(),
+  avatar_url: string(),
+  name: or([string(), null_()]),
+  email: or([string(), null_()]),
+  bio: or([string(), null_()]),
+  public_repos: number(),
+  followers: number(),
+  following: number()
+});
+
+const githubRepoValidator = object({
+  id: number(),
+  name: string(),
+  full_name: string(),
+  description: or([string(), null_()]),
+  private: boolean(),
+  fork: boolean(),
+  stargazers_count: number(),
+  language: or([string(), null_()])
+});
+
+async function fetchGitHubUser(username: string) {
+  const response = await fetch(`https://api.github.com/users/${username}`);
+  const data = await response.json();
+  
+  validate(data, githubUserValidator);
+  return data; // Fully typed
+}
+
+async function fetchUserRepos(username: string) {
+  const response = await fetch(`https://api.github.com/users/${username}/repos`);
+  const data = await response.json();
+  
+  validate(data, array(githubRepoValidator));
+  return data; // Array of typed repos
+}
+```
+
+## Custom Error Handling
+
+### Building User-Friendly Error Messages
+
+```typescript
+import { ValidationError, validate, object, string, number } from "valleys";
+
+function formatValidationError(error: ValidationError): string {
+  const root = error.experimental_root;
+  
+  if (root.type === "object-property") {
+    const field = root.entry.property;
+    const node = root.entry.node;
+    
+    if (node.type === "schema-violation") {
+      return `Invalid ${field}: expected ${node.context.schema.type}, got ${typeof node.data}`;
+    }
+    
+    if (node.type === "rule-violation") {
+      return `Invalid ${field}: ${String(node.rule)} constraint failed`;
+    }
+  }
+  
+  // Fallback to default message
+  return error.message;
+}
+
+function validateUserInput(data: unknown) {
+  const validator = object({
+    username: string({ minLength: 3, maxLength: 20 }),
+    age: number({ min: 0, max: 120 })
+  });
+  
+  try {
+    validate(data, validator);
+    return { success: true, data };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return { 
+        success: false, 
+        error: formatValidationError(error) 
+      };
+    }
+    throw error;
+  }
+}
+```
+
+### Structured Error Response for APIs
+
+```typescript
+import { ValidationError } from "valleys";
+
+interface ValidationErrorResponse {
+  field?: string;
+  message: string;
+  code: string;
+}
+
+function buildErrorResponse(error: ValidationError): ValidationErrorResponse {
+  const root = error.experimental_root;
+  
+  let field: string | undefined;
+  let current = root;
+  
+  // Walk the error tree to find the field path
+  const pathParts: string[] = [];
+  while (current.type === "object-property" || current.type === "array-index") {
+    if (current.type === "object-property") {
+      pathParts.push(current.entry.property);
+      current = current.entry.node;
+    } else {
+      pathParts.push(`[${current.entry.index}]`);
+      current = current.entry.node;
+    }
+  }
+  
+  field = pathParts.length > 0 ? pathParts.join(".") : undefined;
+  
+  const code = current.type === "schema-violation" 
+    ? "INVALID_TYPE" 
+    : "CONSTRAINT_VIOLATION";
+  
+  return {
+    field,
+    message: error.message,
+    code
+  };
+}
+```
+
+## Type Extraction Patterns
+
+### Sharing Types Between Validator and Code
+
+```typescript
+import { object, string, number, array, InferOutputOf } from "valleys";
+
+// Define validator
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  roles: array(string())
+});
+
+// Extract type from validator
+type User = InferOutputOf<typeof userValidator>;
+// type User = {
+//   id: number;
+//   name: string;
+//   email: string;
+//   roles: string[];
+// }
+
+// Use the type throughout your application
+function processUser(user: User) {
+  console.log(`Processing ${user.name}`);
+}
+
+function validateAndProcess(data: unknown) {
+  validate(data, userValidator);
+  processUser(data); // data is now User type
+}
+```
+
+### Complex Nested Types
+
+```typescript
+import { object, string, number, array, or, null_, InferOutputOf } from "valleys";
+
+const addressValidator = object({
+  street: string(),
+  city: string(),
+  country: string(),
+  postalCode: string()
+});
+
+const companyValidator = object({
+  id: number(),
+  name: string(),
+  website: or([string(), null_()])
+});
+
+const employeeValidator = object({
+  id: number(),
+  name: string(),
+  email: string(),
+  address: addressValidator,
+  company: or([companyValidator, null_()]),
+  skills: array(string())
+});
+
+// Extract nested types
+type Address = InferOutputOf<typeof addressValidator>;
+type Company = InferOutputOf<typeof companyValidator>;
+type Employee = InferOutputOf<typeof employeeValidator>;
+
+// Employee type is fully inferred:
+// {
+//   id: number;
+//   name: string;
+//   email: string;
+//   address: { street: string; city: string; country: string; postalCode: string };
+//   company: { id: number; name: string; website: string | null } | null;
+//   skills: string[];
+// }
+```
+
+## Special Validators
+
+### URL Validation with Branded Types
+
+```typescript
+import { validate, url, UrlString } from "valleys";
+
+function fetchFromUrl(apiUrl: UrlString) {
+  // We know apiUrl is a valid URL
+  return fetch(apiUrl);
+}
+
+const input = "https://api.example.com/data";
+validate(input, url());
+// input is now UrlString (branded type)
+
+fetchFromUrl(input); // Type-safe
+```
+
+### ISO8601 DateTime Validation
+
+```typescript
+import { validate, iso8601, Iso8601String, object, string } from "valleys";
+
+const eventValidator = object({
+  id: string(),
+  timestamp: iso8601(),
+  name: string()
+});
+
+function formatEventTime(timestamp: Iso8601String): string {
+  return new Date(timestamp).toLocaleString();
+}
+
+const event = {
+  id: "evt_123",
+  timestamp: "2024-01-15T10:30:00Z",
+  name: "User Login"
+};
+
+validate(event, eventValidator);
+// event.timestamp is now Iso8601String (branded type)
+console.log(formatEventTime(event.timestamp));
+```
+
+## Best Practices
+
+### 1. Define Validators as Constants
+
+```typescript
+// Good: Reusable and type-extractable
+const userValidator = object({
+  id: number(),
+  name: string()
+});
+
+type User = InferOutputOf<typeof userValidator>;
+
+// Avoid: Inline validators lose reusability
+function validateUser(data: unknown) {
+  validate(data, object({ id: number(), name: string() }));
+}
+```
+
+### 2. Use Specific Constraints
+
+```typescript
+// Good: Specific constraints catch more errors
+const passwordValidator = string({ minLength: 8, maxLength: 128 });
+const ageValidator = number({ min: 0, max: 150 });
+const itemsValidator = array(string(), { minLength: 1 });
+
+// Okay: But less restrictive
+const genericString = string();
+const genericNumber = number();
+```
+
+### 3. Validate at System Boundaries
+
+```typescript
+// Validate external data immediately
+app.post("/api/users", (req, res) => {
+  validate(req.body, userValidator); // Boundary: external request
+  // ... rest of handler uses typed data
+});
+
+async function fetchExternalApi() {
+  const response = await fetch(url);
+  const data = await response.json();
+  validate(data, apiResponseValidator); // Boundary: external API
+  return data;
+}
+```
+
+### 4. Handle Validation Errors Appropriately
+
+```typescript
+// In request handlers: return error response
+try {
+  validate(req.body, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    return res.status(400).json({ error: error.message });
+  }
+  throw error;
+}
+
+// In application code: let it propagate or handle specifically
+try {
+  validate(config, configValidator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error("Invalid configuration:", error.message);
+    process.exit(1);
+  }
+  throw error;
+}
+```
+
+For more information on validators and their options, see the [API Reference](/api/validate).

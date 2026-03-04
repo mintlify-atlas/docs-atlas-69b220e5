@@ -1,0 +1,151 @@
+---
+title: 'boolean()'
+description: 'Creates a validator that validates boolean values'
+---
+
+## Function Signature
+
+```typescript
+function boolean(): Validator<boolean, { type: "boolean" }, {}>
+```
+
+## Description
+
+Creates a validator that validates boolean values. Only accepts the literal values `true` or `false`. This validator has no configurable rules.
+
+## Parameters
+
+This function takes no parameters.
+
+## Returns
+
+Returns a `Validator<boolean>` that can be used to validate boolean values.
+
+## TypeScript Type
+
+When using `InferOutputOf<typeof validator>`, the resulting type is:
+
+```typescript
+boolean
+```
+
+## Examples
+
+### Basic Boolean Validation
+
+```typescript
+import { boolean, validate } from 'valleys';
+
+const isActiveValidator = boolean();
+
+const data: unknown = true;
+validate(data, isActiveValidator);
+// data is now typed as boolean
+console.log(data); // true
+```
+
+### Validating False
+
+```typescript
+import { boolean, validate } from 'valleys';
+
+const validator = boolean();
+
+const data: unknown = false;
+validate(data, validator);
+// ✅ Passes validation
+console.log(data); // false
+```
+
+### Rejecting Non-Boolean Values
+
+```typescript
+import { boolean, validate } from 'valleys';
+
+const validator = boolean();
+
+// Truthy values that are not booleans are rejected
+validate(1, validator);
+// Throws ValidationError: schema violation
+
+validate("true", validator);
+// Throws ValidationError: schema violation
+
+validate(null, validator);
+// Throws ValidationError: schema violation
+
+validate(undefined, validator);
+// Throws ValidationError: schema violation
+```
+
+### Using with Objects
+
+```typescript
+import { object, boolean, string, validate } from 'valleys';
+
+const userValidator = object({
+  username: string(),
+  isActive: boolean(),
+  isAdmin: boolean(),
+  emailVerified: boolean()
+});
+
+const data: unknown = {
+  username: "alice",
+  isActive: true,
+  isAdmin: false,
+  emailVerified: true
+};
+
+validate(data, userValidator);
+// ✅ Passes validation
+```
+
+### Using with Arrays
+
+```typescript
+import { array, boolean, validate } from 'valleys';
+
+const flagsValidator = array(boolean());
+
+const data: unknown = [true, false, true, true];
+validate(data, flagsValidator);
+// ✅ Passes validation
+// data is now typed as boolean[]
+```
+
+### Feature Flags Example
+
+```typescript
+import { object, boolean, validate } from 'valleys';
+
+const featureFlagsValidator = object({
+  enableNewUI: boolean(),
+  enableBetaFeatures: boolean(),
+  enableAnalytics: boolean()
+});
+
+const flags: unknown = {
+  enableNewUI: true,
+  enableBetaFeatures: false,
+  enableAnalytics: true
+};
+
+validate(flags, featureFlagsValidator);
+// ✅ Passes validation
+```
+
+## Validation Behavior
+
+1. **Type Check**: Checks if the input is of type `boolean` using `typeof input !== "boolean"`
+2. No additional rules are applied - the validator only checks the type
+
+## Error Types
+
+- **Schema Violation**: Thrown when the input is not a boolean value (`true` or `false`)
+
+## Notes
+
+- This validator does NOT accept truthy or falsy values - it only accepts the literal boolean values `true` and `false`
+- No type coercion is performed - strings like `"true"` or `"false"` will fail validation
+- Numbers like `1` or `0` will fail validation even though they are truthy/falsy in JavaScript

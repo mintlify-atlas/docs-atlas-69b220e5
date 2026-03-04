@@ -1,0 +1,223 @@
+---
+title: "validate()"
+description: "Assertion-based validation function that throws ValidationError on failure"
+---
+
+## Function Signature
+
+```typescript
+function validate<D extends Validator<any, any, any>>(
+  value: unknown,
+  validator: D,
+): asserts value is InferOutputOf<D>
+```
+
+## Description
+
+Validates a value using a validator and asserts its type. This is an assertion-based validation function that throws a `ValidationError` if validation fails.
+
+After calling `validate()`, TypeScript will narrow the type of the value to the validator's output type, allowing you to use it with full type safety.
+
+## Parameters
+
+<ParamField path="value" type="unknown" required>
+  The value to validate. Can be any type.
+</ParamField>
+
+<ParamField path="validator" type="Validator<any, any, any>" required>
+  The validator to use for validation. This can be any validator created by the library's validator functions (e.g., `string()`, `number()`, `object()`, etc.).
+</ParamField>
+
+## Returns
+
+<ResponseField name="return" type="void">
+  This function does not return a value. Instead, it uses TypeScript's assertion signature to narrow the type of the `value` parameter.
+  
+  - If validation succeeds: The function returns normally and TypeScript narrows the type
+  - If validation fails: Throws a `ValidationError`
+</ResponseField>
+
+## Throws
+
+<ResponseField name="ValidationError" type="ValidationError">
+  Thrown when the value doesn't match the validator's schema or rules.
+  
+  The error contains:
+  - `message`: A formatted error message with the validation path, reason, expected schema, and received value
+  - `experimental_root`: The root error node containing the full error structure
+</ResponseField>
+
+## Type Assertion Behavior
+
+The function uses TypeScript's `asserts` keyword to perform type narrowing:
+
+```typescript
+asserts value is InferOutputOf<D>
+```
+
+This means after the function call, TypeScript will treat `value` as having the type produced by the validator.
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { validate, string } from 'valleys';
+
+const data: unknown = 'hello';
+
+// Before validation: data is unknown
+validate(data, string());
+
+// After validation: TypeScript knows data is string
+console.log(data.toUpperCase()); // ✅ No type errors
+```
+
+### Object Validation
+
+```typescript
+import { validate, object, string, number } from 'valleys';
+
+const userValidator = object({
+  id: number(),
+  name: string(),
+  email: string()
+});
+
+const data: unknown = {
+  id: 1,
+  name: 'Alice',
+  email: 'alice@example.com'
+};
+
+validate(data, userValidator);
+
+// TypeScript now knows data is { id: number; name: string; email: string; }
+console.log(data.name); // ✅ No type errors
+console.log(data.email.toUpperCase()); // ✅ String methods available
+```
+
+### Error Handling
+
+```typescript
+import { validate, ValidationError, number } from 'valleys';
+
+try {
+  const data: unknown = 'not a number';
+  validate(data, number());
+  // If we get here, data is guaranteed to be a number
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed due to schema mismatch; expected schema: {"type":"number"}; received value: "not a number""
+    
+    // Access the error structure
+    const errorNode = error.experimental_root;
+    console.log(errorNode.type); // "schema-violation"
+  }
+}
+```
+
+### Nested Validation Errors
+
+```typescript
+import { validate, ValidationError, object, array, number } from 'valleys';
+
+const validator = object({
+  users: array(object({
+    id: number(),
+    age: number({ min: 0, max: 120 })
+  }))
+});
+
+try {
+  validate({
+    users: [
+      { id: 1, age: 25 },
+      { id: 2, age: 150 } // Invalid: exceeds max
+    ]
+  }, validator);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.message);
+    // "Validation failed at users[1].age due to rule violation: max; expected schema: {"type":"number"} with rules: {"min":0,"max":120}; received value: 150"
+  }
+}
+```
+
+### With Branded Types
+
+```typescript
+import { validate, url, iso8601 } from 'valleys';
+
+const homepage: unknown = 'https://example.com';
+const timestamp: unknown = '2024-03-15T10:30:00Z';
+
+validate(homepage, url());
+validate(timestamp, iso8601());
+
+// homepage is now UrlString
+// timestamp is now Iso8601String
+
+// Both can be used as regular strings
+const urlLength: number = homepage.length;
+const date = new Date(timestamp);
+```
+
+### Function Parameter Validation
+
+```typescript
+import { validate, object, string, number } from 'valleys';
+
+const userSchema = object({
+  name: string({ minLength: 1 }),
+  age: number({ min: 0 })
+});
+
+function createUser(data: unknown) {
+  // Validate and assert the type
+  validate(data, userSchema);
+  
+  // TypeScript now knows data matches the schema
+  console.log(`Creating user: ${data.name}, age ${data.age}`);
+  return data;
+}
+
+createUser({ name: 'Alice', age: 30 }); // ✅ Works
+createUser({ name: 'Bob' }); // ❌ Throws ValidationError (missing age)
+```
+
+## Implementation Details
+
+From `index.ts:878-888`:
+
+```typescript
+export function validate<D extends Validator<any, any, any>>(
+  value: unknown,
+  validator: D,
+): asserts value is InferOutputOf<D> {
+  const result = validator.unstable_validate(value);
+  if (result.error !== undefined) {
+    const error = new ValidationError(result.error);
+    Error.captureStackTrace(error, validate);
+    throw error;
+  }
+}
+```
+
+The function:
+1. Calls the validator's `unstable_validate` method
+2. If an error is returned, creates a `ValidationError` with the error node
+3. Captures the stack trace (excluding the `validate` function itself)
+4. Throws the error
+5. If no error, returns normally and TypeScript narrows the type
+
+## Stack Trace Handling
+
+The function uses `Error.captureStackTrace(error, validate)` to exclude the `validate` function itself from the stack trace. This makes error stack traces more useful by starting from the calling code.
+
+## See Also
+
+- [ValidationError](/api/validation-error) - Error class for validation failures
+- [InferOutputOf](/api/infer-output-of) - Type utility for extracting validator output types
+- [Validators](/concepts/validators) - The base validator interface
